@@ -13,6 +13,17 @@ if sys.stdout is None or sys.stderr is None:
     sys.stdout = sys.stdout or log
     sys.stderr = sys.stderr or log
 
-from plainquant.desktop import main
+import traceback
 
-sys.exit(main())
+code = 1
+try:
+    from plainquant.desktop import main
+
+    code = main()
+except BaseException:  # noqa: BLE001 - log any crash, then exit
+    traceback.print_exc()
+finally:
+    sys.stdout.flush()
+    sys.stderr.flush()
+    # Exit now: on Windows the web view runtime can keep a finished process alive.
+    os._exit(code or 0)

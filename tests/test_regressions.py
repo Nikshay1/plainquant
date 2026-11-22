@@ -247,3 +247,19 @@ def test_page_assets_are_bundled_and_allowlisted():
         assert r.status_code == 200 and r.headers["content-type"] == kind and r.content
     assert client.get("/assets/Doto-OFL.txt").status_code == 404
     assert client.get("/assets/..%2Fserver.py").status_code == 404
+
+
+def test_app_starts_when_the_system_encoding_is_not_utf8(tmp_path):
+    """Windows reads files as cp1252 by default; the page and examples contain non-ASCII text."""
+    import os
+    import subprocess
+    import sys
+
+    code = (
+        "import locale; assert locale.getpreferredencoding(False).lower() != 'utf-8';"
+        "from plainquant import examples; from plainquant.server import create_app;"
+        "create_app(provider=object()); [examples.load(n) for n in examples.names()]"
+    )
+    env = {**os.environ, "LC_ALL": "C", "PYTHONUTF8": "0", "PYTHONCOERCECLOCALE": "0", "PLAINQUANT_CONFIG": str(tmp_path / "s.json")}
+    r = subprocess.run([sys.executable, "-c", code], check=False, env=env, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr[-800:]

@@ -28,7 +28,7 @@ def path() -> Path:
 
 def load() -> dict | None:
     try:
-        data = json.loads(path().read_text())
+        data = json.loads(path().read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
     if not isinstance(data, dict) or not data.get("provider"):
@@ -43,7 +43,7 @@ def save(provider: str, model: str, base_url: str | None = None, api_key: str | 
     tmp = p.with_suffix(".tmp")
     # Create the file owner-only before writing the key into it.
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w") as f:
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
     os.replace(tmp, p)
     return p

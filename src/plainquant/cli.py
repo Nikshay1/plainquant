@@ -45,10 +45,10 @@ def _llm(args):
 def _report(result, args) -> None:
     print(to_text(result))
     if args.json:
-        Path(args.json).write_text(json.dumps(to_dict(result), indent=2, default=str))
+        Path(args.json).write_text(json.dumps(to_dict(result), indent=2, default=str), encoding="utf-8")
         print(f"Saved {args.json}", file=sys.stderr)
     if args.html:
-        Path(args.html).write_text(to_html(result))
+        Path(args.html).write_text(to_html(result), encoding="utf-8")
         print(f"Saved {args.html}", file=sys.stderr)
 
 
@@ -60,7 +60,7 @@ def cmd_run(args) -> int:
     if parsed.outcome == "decline":
         return 2
     if args.save:
-        Path(args.save).write_text(parsed.strategy.model_dump_json(indent=2, exclude_none=True))
+        Path(args.save).write_text(parsed.strategy.model_dump_json(indent=2, exclude_none=True), encoding="utf-8")
         print(f"\nSaved the strategy to {args.save}. Edit it and run: plainquant backtest {args.save}")
     if not args.yes:
         if not sys.stdin.isatty():
@@ -76,7 +76,7 @@ def cmd_run(args) -> int:
 def cmd_parse(args) -> int:
     parsed = parse_strategy(" ".join(args.prompt), _llm(args))
     if args.output and parsed.outcome == "strategy":
-        Path(args.output).write_text(parsed.strategy.model_dump_json(indent=2, exclude_none=True))
+        Path(args.output).write_text(parsed.strategy.model_dump_json(indent=2, exclude_none=True), encoding="utf-8")
         _print_parse(parsed)
         print(f"\nSaved {args.output}")
     else:
@@ -88,7 +88,7 @@ def cmd_backtest(args) -> int:
     if args.example:
         strategy = examples.load(args.example)
     elif args.file:
-        strategy = Strategy.model_validate_json(Path(args.file).read_text())
+        strategy = Strategy.model_validate_json(Path(args.file).read_text(encoding="utf-8"))
     else:
         print("Give a strategy file or --example NAME", file=sys.stderr)
         return 1

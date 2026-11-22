@@ -71,7 +71,7 @@ def local_only(request: Request) -> None:
 def create_app(provider: DataProvider | None = None, llm: LLMConfig | None = None) -> FastAPI:
     app = FastAPI(title="plainquant", docs_url="/api/docs")
     provider = provider or YahooProvider()
-    page = (resources.files("plainquant.web") / "index.html").read_text()
+    page = (resources.files("plainquant.web") / "index.html").read_text(encoding="utf-8")
 
     def llm_config() -> LLMConfig:
         return llm or config_from_env()

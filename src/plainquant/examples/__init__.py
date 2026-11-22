@@ -15,4 +15,4 @@ def load(name: str) -> Strategy:
     path = resources.files(__name__) / f"{name}.json"
     if not path.is_file():
         raise ValueError(f"No example named '{name}'. Choose from: {', '.join(names())}")
-    return Strategy.model_validate_json(path.read_text())
+    return Strategy.model_validate_json(path.read_text(encoding="utf-8"))
