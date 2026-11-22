@@ -86,7 +86,9 @@ def config_from_env(provider: str | None = None, model: str | None = None, base_
         raise LLMNotConfigured(f"Set a model for {provider}: --model <name> or PLAINQUANT_MODEL=<name>")
     base_url = base_url or env.get("PLAINQUANT_BASE_URL") or preset.get("base_url")
     key_env = preset.get("key_env")
-    api_key = env.get("PLAINQUANT_API_KEY") or (env.get(key_env) if key_env else None)
+    # A provider's own key is only sent to that provider's endpoint. Custom endpoints use PLAINQUANT_API_KEY.
+    custom_endpoint = base_url != preset.get("base_url")
+    api_key = env.get("PLAINQUANT_API_KEY") or (env.get(key_env) if key_env and not custom_endpoint else None)
     return LLMConfig(provider=provider, kind=preset["kind"], model=model, base_url=base_url, api_key=api_key)
 
 
@@ -201,6 +203,9 @@ def semantic_errors(s: Strategy) -> list[str]:
                             errors.append(f"{op.name} output must be one of {list(spec.outputs)}, got '{op.output}'")
                         if spec.intraday_only and s.interval == "1d":
                             errors.append(f"{op.name} needs an intraday interval")
+                        bar = indicators.INTERVAL_MINUTES[s.interval]
+                        if op.name in ("orb_high", "orb_low") and bar and (op.minutes or 15) % bar:
+                            errors.append(f"{op.name} minutes must be a multiple of the {bar}-minute candle")
     return errors
 
 
@@ -218,30 +223,24 @@ def _extract_json(text: str) -> dict:
     return json.loads(text[start : end + 1])
 
 
-def _anthropic_parse(cfg: LLMConfig, messages: list[dict]) -> ParseResult:
+def _anthropic_chat(cfg: LLMConfig, messages: list[dict]) -> str:
     try:
         import anthropic
     except ImportError as e:  # pragma: no cover
         raise LLMNotConfigured("Install the Claude client: pip install 'plainquant[anthropic]'") from e
     client = anthropic.Anthropic(api_key=cfg.api_key) if cfg.api_key else anthropic.Anthropic()
-    kwargs = {
-        "model": cfg.model,
-        "max_tokens": 16000,
-        "system": SYSTEM_PROMPT,
-        "messages": messages,
-        "output_format": ParseResult,
-    }
+    # The strategy schema is beyond the size limits of constrained decoding, so the schema goes in the
+    # prompt and the reply is validated (and repaired) locally, the same way as other providers.
+    kwargs = {"model": cfg.model, "max_tokens": 16000, "system": _openai_instructions(), "messages": messages}
     if cfg.model in _FALLBACK_MODELS:
-        resp = client.beta.messages.parse(betas=["server-side-fallback-2026-07-01"], fallbacks="default", **kwargs)
+        resp = client.beta.messages.create(betas=["server-side-fallback-2026-07-01"], fallbacks="default", **kwargs)
     else:
-        resp = client.messages.parse(**kwargs)
+        resp = client.messages.create(**kwargs)
     if resp.stop_reason == "refusal":
         raise LLMError("The model declined this request.")
     if resp.stop_reason == "max_tokens":
         raise LLMError("The model ran out of output tokens.")
-    if resp.parsed_output is None:
-        raise LLMError("The model did not return a strategy.")
-    return resp.parsed_output
+    return "".join(b.text for b in resp.content if b.type == "text")
 
 
 def _openai_chat(cfg: LLMConfig, messages: list[dict]) -> str:
@@ -267,13 +266,10 @@ def parse_strategy(prompt: str, cfg: LLMConfig | None = None, max_repairs: int =
     messages: list[dict] = [{"role": "user", "content": prompt}]
     last_error = ""
     for _ in range(max_repairs + 1):
-        reply_text = None
+        chat = _chat or (_anthropic_chat if cfg.kind == "anthropic" else _openai_chat)
+        reply_text = chat(cfg, messages)
         try:
-            if cfg.kind == "anthropic" and _chat is None:
-                result = _anthropic_parse(cfg, messages)
-            else:
-                reply_text = (_chat or _openai_chat)(cfg, messages)
-                result = ParseResult.model_validate(_extract_json(reply_text))
+            result = ParseResult.model_validate(_extract_json(reply_text))
             if result.outcome == "strategy":
                 errs = semantic_errors(result.strategy)
                 if errs:
@@ -281,11 +277,6 @@ def parse_strategy(prompt: str, cfg: LLMConfig | None = None, max_repairs: int =
             return result
         except (ValidationError, ValueError) as e:
             last_error = str(e)[:2000]
-            if reply_text is not None:
-                messages.append({"role": "assistant", "content": reply_text})
-                messages.append({"role": "user", "content": f"That reply is invalid: {last_error}\nSend the corrected JSON only."})
-            else:
-                messages = [
-                    {"role": "user", "content": f"{prompt}\n\nA previous attempt was invalid: {last_error}\nAvoid that mistake."}
-                ]
+            messages.append({"role": "assistant", "content": reply_text or "(empty reply)"})
+            messages.append({"role": "user", "content": f"That reply is invalid: {last_error}\nSend the corrected JSON only."})
     raise LLMError(f"The model could not produce a valid strategy: {last_error}")

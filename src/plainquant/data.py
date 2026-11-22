@@ -59,7 +59,7 @@ def to_ticker(symbol: str, market: str) -> str:
     if market == "india":
         if s in INDIA_ALIASES:
             return INDIA_ALIASES[s]
-        if any(c in s for c in ".^=-") or s.endswith(".NS"):
+        if any(c in s for c in ".^="):
             return s
         return f"{s.replace(' ', '')}.NS"
     return s
@@ -102,6 +102,11 @@ class YahooProvider:
                 }
             )
             start = new_start
+            if start > end:
+                raise ValueError(
+                    f"Yahoo only keeps the last {limit} days of {interval} candles, and this test period ended earlier. "
+                    "Use daily candles or a CSV file from your broker."
+                )
         cached = self._cache_path(ticker, interval, start, end)
         if cached.exists() and end < today:
             df = pd.read_pickle(cached)
@@ -111,7 +116,7 @@ class YahooProvider:
                 start=start.isoformat(),
                 end=(end + dt.timedelta(days=1)).isoformat(),
                 interval=interval,
-                auto_adjust=True,
+                auto_adjust=False,  # traded prices (split-adjusted), so levels match your charts
                 progress=False,
                 multi_level_index=False,
             )
@@ -146,12 +151,21 @@ class CSVProvider:
         tcol = next((c for c in ("timestamp", "datetime", "date", "time") if c in df.columns), None)
         if tcol is None:
             raise ValueError("CSV needs a timestamp, datetime or date column")
-        df.index = pd.to_datetime(df.pop(tcol))
+        raw = df.pop(tcol)
+        try:
+            stamps = pd.to_datetime(raw)
+        except ValueError:
+            stamps = None
+        if stamps is None or not (isinstance(stamps.dtype, pd.DatetimeTZDtype) or pd.api.types.is_datetime64_dtype(stamps)):
+            stamps = pd.to_datetime(raw, utc=True)  # mixed UTC offsets, e.g. across a DST change
+        df.index = pd.DatetimeIndex(stamps)
         df = normalise(df)
-        if self.timezone and df.index.tz is None:
-            df.index = df.index.tz_localize(self.timezone)
-        lo = pd.Timestamp(start)
-        hi = pd.Timestamp(end) + pd.Timedelta(days=1)
+        if self.timezone:
+            tz = self.timezone
+            df.index = df.index.tz_localize(tz) if df.index.tz is None else df.index.tz_convert(tz)
+        # coarse window with a day of margin; the engine trims to exact session dates
+        lo = pd.Timestamp(start) - pd.Timedelta(days=1)
+        hi = pd.Timestamp(end) + pd.Timedelta(days=2)
         if df.index.tz is not None:
             lo, hi = lo.tz_localize(df.index.tz), hi.tz_localize(df.index.tz)
         df = df[(df.index >= lo) & (df.index < hi)]

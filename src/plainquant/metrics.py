@@ -13,10 +13,11 @@ def _r(x, nd=2):
     return round(float(x), nd)
 
 
-def compute_metrics(trades: pd.DataFrame, equity: pd.Series, capital: float, interval: str) -> dict:
+def compute_metrics(trades: pd.DataFrame, equity: pd.Series, capital: float, in_market=None) -> dict:
     daily = equity.groupby(equity.index.date).last()
     daily.index = pd.to_datetime(daily.index)
-    rets = daily.pct_change().dropna()
+    # the first day's return is measured from the starting capital
+    rets = pd.Series([capital, *daily.to_numpy()]).pct_change().dropna()
 
     peak = equity.cummax()
     dd = equity - peak
@@ -46,9 +47,8 @@ def compute_metrics(trades: pd.DataFrame, equity: pd.Series, capital: float, int
         best_streak = max(best_streak, streak)
 
     exposure = None
-    if n and len(equity):
-        held = int(trades["bars_held"].sum())
-        exposure = 100 * min(held, len(equity)) / len(equity)
+    if in_market is not None and len(in_market):
+        exposure = 100 * float(sum(bool(x) for x in in_market)) / len(in_market)
 
     return {
         "net_pnl": _r(final - capital),

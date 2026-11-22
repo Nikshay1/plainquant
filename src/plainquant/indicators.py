@@ -34,7 +34,32 @@ def _ema(s: pd.Series, n: int) -> pd.Series:
 
 
 def _wilder(s: pd.Series, n: int) -> pd.Series:
-    return s.ewm(alpha=1.0 / n, adjust=False, min_periods=n).mean()
+    """Wilder smoothing, seeded with the simple mean of the first n values (as TA-Lib does)."""
+    v = s.to_numpy(dtype=float)
+    out = np.full(len(v), np.nan)
+    valid = np.flatnonzero(~np.isnan(v))
+    if len(valid) >= n:
+        first = valid[n - 1]
+        out[first] = v[valid[:n]].mean()
+        for i in range(first + 1, len(v)):
+            x = v[i]
+            out[i] = out[i - 1] if np.isnan(x) else out[i - 1] + (x - out[i - 1]) / n
+    return pd.Series(out, index=s.index)
+
+
+INTERVAL_MINUTES = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "1h": 60, "1d": None}
+
+
+def bar_minutes(df: pd.DataFrame) -> int | None:
+    """Candle length in minutes inferred from the data, or None for daily candles."""
+    if len(df) < 2:
+        return None
+    d = pd.Series(df.index).diff().dropna()
+    same_day = pd.Series(df.index.date[1:]) == pd.Series(df.index.date[:-1])
+    d = d[same_day.to_numpy()]
+    if d.empty:
+        return None
+    return max(1, int(d.min().total_seconds() // 60))
 
 
 def _true_range(df: pd.DataFrame) -> pd.Series:
@@ -74,7 +99,7 @@ def vwap(df, **_):
     d = _dates(df).values
     pv = (tp * df["volume"]).groupby(d).cumsum()
     vol = df["volume"].groupby(d).cumsum()
-    return (pv / vol.replace(0, np.nan)).fillna(tp)
+    return pv / vol.replace(0, np.nan)  # undefined until some volume has traded
 
 
 def volume_sma(df, period=20, **_):
@@ -225,21 +250,26 @@ def prev_day_close(df, **_):
     return _prev_day(df, "close")
 
 
-def _orb(df, minutes, session_open, col, agg):
-    t0 = pd.Timestamp(f"2000-01-01 {session_open}")
-    cutoff = (t0 + pd.Timedelta(minutes=minutes)).time()
-    times = pd.Series(df.index.time, index=df.index)
-    in_range = times < cutoff
+def _orb(df, minutes, session_open, col, agg, bar):
+    bar = bar or bar_minutes(df)
+    if bar is None:
+        raise ValueError("the opening range needs intraday candles")
+    if minutes % bar:
+        raise ValueError(f"a {minutes}-minute opening range needs candles that divide it evenly (these are {bar}-minute)")
+    oh, om = (int(x) for x in session_open.split(":"))
+    since_open = pd.Series(df.index.hour * 60 + df.index.minute - (oh * 60 + om), index=df.index)
+    in_range = since_open < minutes
+    complete = since_open + bar >= minutes  # known from the close of the candle that ends the range
     level = df[col].where(in_range).groupby(_dates(df).values).transform(agg)
-    return level.where(~in_range)  # unknown until the range has finished
+    return level.where(complete)
 
 
-def orb_high(df, minutes=15, session_open="09:15", **_):
-    return _orb(df, minutes, session_open, "high", "max")
+def orb_high(df, minutes=15, session_open="09:15", bar_minutes=None, **_):
+    return _orb(df, minutes, session_open, "high", "max", bar_minutes)
 
 
-def orb_low(df, minutes=15, session_open="09:15", **_):
-    return _orb(df, minutes, session_open, "low", "min")
+def orb_low(df, minutes=15, session_open="09:15", bar_minutes=None, **_):
+    return _orb(df, minutes, session_open, "low", "min", bar_minutes)
 
 
 def gap_pct(df, **_):
@@ -289,7 +319,9 @@ INDICATOR_NAMES: list[str] = list(REGISTRY)
 _PARAM_NAMES = ("period", "fast", "slow", "signal", "std", "multiplier", "minutes")
 
 
-def compute(df: pd.DataFrame, name: str, params: dict, output: str | None, session_open: str) -> pd.Series:
+def compute(
+    df: pd.DataFrame, name: str, params: dict, output: str | None, session_open: str, bar_minutes: int | None = None
+) -> pd.Series:
     spec = REGISTRY[name]
     kwargs = dict(spec.params)
     for k in _PARAM_NAMES:
@@ -305,7 +337,7 @@ def compute(df: pd.DataFrame, name: str, params: dict, output: str | None, sessi
             raise ValueError(f"{name}: {k} must be at least 1")
         if k in kwargs:
             kwargs[k] = int(kwargs[k])
-    return spec.fn(df, session_open=session_open, **kwargs)
+    return spec.fn(df, session_open=session_open, bar_minutes=bar_minutes, **kwargs)
 
 
 def describe() -> str:

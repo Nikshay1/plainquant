@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 from typing import Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -20,7 +21,7 @@ _HHMM = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 
 
 class _Model(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
 
 # ---------------------------------------------------------------- operands
@@ -31,7 +32,7 @@ class PriceOperand(_Model):
 
     kind: Literal["price"]
     field: Literal["open", "high", "low", "close", "volume"] = "close"
-    bars_ago: int = Field(0, description="0 = current bar, 1 = previous bar, ...")
+    bars_ago: int = Field(0, ge=0, description="0 = current bar, 1 = previous bar, ...")
 
 
 class IndicatorOperand(_Model):
@@ -39,15 +40,15 @@ class IndicatorOperand(_Model):
 
     kind: Literal["indicator"]
     name: IndicatorName  # type: ignore[valid-type]
-    period: int | None = None
-    fast: int | None = None
-    slow: int | None = None
-    signal: int | None = None
-    std: float | None = None
-    multiplier: float | None = None
-    minutes: int | None = None
+    period: int | None = Field(None, ge=1)
+    fast: int | None = Field(None, ge=1)
+    slow: int | None = Field(None, ge=1)
+    signal: int | None = Field(None, ge=1)
+    std: float | None = Field(None, gt=0)
+    multiplier: float | None = Field(None, gt=0)
+    minutes: int | None = Field(None, ge=1)
     output: str | None = Field(None, description="Which line of a multi-line indicator, e.g. 'signal' for MACD")
-    bars_ago: int = 0
+    bars_ago: int = Field(0, ge=0)
 
 
 class ValueOperand(_Model):
@@ -120,7 +121,7 @@ class Distance(_Model):
 
     unit: Literal["percent", "points", "atr", "rr"]
     value: float
-    atr_period: int = 14
+    atr_period: int = Field(14, ge=1)
 
     @field_validator("value")
     @classmethod
@@ -148,17 +149,17 @@ class Risk(_Model):
 
 class Sizing(_Model):
     method: Literal["fixed_quantity", "percent_of_capital"] = "percent_of_capital"
-    value: float = 100.0
+    value: float = Field(100.0, gt=0)
 
 
 class Costs(_Model):
-    slippage_pct: float = Field(0.05, description="Per side, % of price")
-    brokerage_per_order: float = Field(0.0, description="Flat amount per order")
-    charges_pct: float = Field(0.0, description="Taxes and exchange charges per side, % of turnover")
+    slippage_pct: float = Field(0.05, ge=0, description="Per side, % of price")
+    brokerage_per_order: float = Field(0.0, ge=0, description="Flat amount per order")
+    charges_pct: float = Field(0.0, ge=0, description="Taxes and exchange charges per side, % of turnover")
 
 
 class Period(_Model):
-    lookback_days: int | None = Field(None, description="Test the last N calendar days")
+    lookback_days: int | None = Field(None, ge=1, description="Test the last N calendar days")
     start: str | None = Field(None, description="YYYY-MM-DD")
     end: str | None = Field(None, description="YYYY-MM-DD, defaults to today")
 
@@ -176,6 +177,21 @@ class Session(_Model):
         if not _HHMM.match(v):
             raise ValueError("time must be HH:MM (24h)")
         return v
+
+    @field_validator("timezone")
+    @classmethod
+    def _tz(cls, v: str) -> str:
+        try:
+            ZoneInfo(v)
+        except (ZoneInfoNotFoundError, ValueError) as e:
+            raise ValueError(f"unknown time zone '{v}', use an IANA name like Asia/Kolkata") from e
+        return v
+
+    @model_validator(mode="after")
+    def _order(self) -> Session:
+        if not (self.open < self.last_entry <= self.square_off <= self.close):
+            raise ValueError("session times must satisfy open < last_entry <= square_off <= close")
+        return self
 
 
 # ---------------------------------------------------------------- strategy
@@ -196,7 +212,7 @@ class Strategy(_Model):
     capital: float = 100_000.0
     costs: Costs = Field(default_factory=Costs)
     session: Session | None = None
-    max_trades_per_day: int | None = None
+    max_trades_per_day: int | None = Field(None, ge=1)
 
     @model_validator(mode="after")
     def _check(self) -> Strategy:

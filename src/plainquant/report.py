@@ -40,6 +40,8 @@ def to_dict(r: BacktestResult, max_points: int = 1500) -> dict:
     trades = r.trades.copy()
     for col in ("entry_time", "exit_time"):
         trades[col] = trades[col].astype(str)
+    for col, nd in (("entry_price", 4), ("exit_price", 4), ("gross_pnl", 2), ("costs", 2), ("pnl", 2), ("return_pct", 4)):
+        trades[col] = trades[col].astype(float).round(nd)
     return {
         "strategy": r.strategy.model_dump(mode="json", exclude_none=True),
         "rules": explain(r.strategy),

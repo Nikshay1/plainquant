@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -179,11 +180,16 @@ def main(argv: list[str] | None = None) -> int:
     except LLMNotConfigured as e:
         print(e, file=sys.stderr)
         return 1
-    except (LLMError, ValueError) as e:
+    except (LLMError, ValueError, OSError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
     except KeyboardInterrupt:
         return 130
+    except Exception as e:  # provider SDK errors: bad key, unreachable endpoint, rate limits
+        if os.environ.get("PLAINQUANT_DEBUG"):
+            raise
+        print(f"Error: {type(e).__name__}: {e}\n(set PLAINQUANT_DEBUG=1 for the full traceback)", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":  # pragma: no cover

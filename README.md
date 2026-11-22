@@ -71,9 +71,10 @@ Pick whichever you have. Your prompt goes only to the endpoint you configure.
 | LM Studio (free, fully local) | `export PLAINQUANT_PROVIDER=lmstudio PLAINQUANT_MODEL=<model>` |
 | OpenRouter | `export PLAINQUANT_PROVIDER=openrouter OPENROUTER_API_KEY=... PLAINQUANT_MODEL=<model>` |
 | Groq | `export PLAINQUANT_PROVIDER=groq GROQ_API_KEY=... PLAINQUANT_MODEL=<model>` |
-| Any OpenAI-compatible server (vLLM, llama.cpp, ...) | `export PLAINQUANT_PROVIDER=openai PLAINQUANT_BASE_URL=<url> PLAINQUANT_MODEL=<model>` |
+| Any OpenAI-compatible server (vLLM, llama.cpp, ...) | `export PLAINQUANT_PROVIDER=openai PLAINQUANT_BASE_URL=<url> PLAINQUANT_MODEL=<model>` (and `PLAINQUANT_API_KEY` if it needs one) |
 
-Every command also takes `--provider`, `--model` and `--base-url`. Small local models work
+Every command also takes `--provider`, `--model` and `--base-url`. A provider's own key (such as `OPENAI_API_KEY`)
+is only ever sent to that provider; a custom endpoint gets `PLAINQUANT_API_KEY` or nothing. Small local models work
 because the strategy format is flat and the reply is validated, but larger models read
 complicated strategies more reliably.
 
@@ -137,7 +138,7 @@ The full schema is in [`dsl.py`](src/plainquant/dsl.py) and `plainquant schema`.
   both, the stop is assumed to hit first. If the price gaps past a level, the fill is at the open.
 - Intraday strategies take no new entries after `last_entry` (15:00 IST by default), square off
   at `square_off` (15:15), and never hold overnight.
-- One position at a time, long or short.
+- One position at a time, long or short. Sizing by % of capital leaves room for entry fees.
 - Results come with a list of every assumption the engine made, such as default costs or a
   shortened period.
 
@@ -147,7 +148,9 @@ The default source is Yahoo Finance. It's free and needs no key, and it covers N
 stocks, Indian indices (`NIFTY`, `BANKNIFTY`, `FINNIFTY`, `SENSEX`), US stocks and more. Yahoo
 only keeps a short intraday history: 7 days of 1-minute candles, about 60 days of 5 to 30-minute
 candles and 2 years of hourly candles. Daily candles go back decades. When a test asks for more,
-plainquant shortens the period and tells you.
+plainquant shortens the period and tells you. Prices are the traded prices adjusted for splits but
+not for dividends, so price levels match what you see on a chart. A candle that is still forming
+is left out.
 
 For longer intraday history, export candles from your broker and pass them in:
 

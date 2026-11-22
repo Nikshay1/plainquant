@@ -92,20 +92,45 @@ def resolve_period(strategy: Strategy, today: dt.date | None = None) -> tuple[dt
     return start, end, []
 
 
-def prepare(df: pd.DataFrame, strategy: Strategy, session: Session) -> pd.DataFrame:
+def prepare(
+    df: pd.DataFrame,
+    strategy: Strategy,
+    session: Session,
+    start: dt.date | None = None,
+    end: dt.date | None = None,
+    now: pd.Timestamp | None = None,
+) -> tuple[pd.DataFrame, list[dict]]:
+    """Put candles in the session time zone, keep the test window, drop candles still forming."""
+    notices = []
     df = df.copy()
     if df.index.tz is None:
         df.index = df.index.tz_localize(session.timezone)
     else:
         df.index = df.index.tz_convert(session.timezone)
-    if strategy.interval != "1d":
+    if start is not None and end is not None:
+        d = df.index.date
+        df = df[(d >= start) & (d <= end)]
+    bar = indicators.INTERVAL_MINUTES[strategy.interval]
+    if bar is not None:
         t = df.index.time
         o = dt.time.fromisoformat(session.open)
         c = dt.time.fromisoformat(session.close)
         df = df[(t >= o) & (t < c)]
+    now = now if now is not None else pd.Timestamp.now(tz=session.timezone)
+    now = now.tz_convert(session.timezone)
+    if len(df):
+        if bar is not None:
+            finished = df.index + pd.Timedelta(minutes=bar) <= now
+        else:
+            close = dt.time.fromisoformat(session.close)
+            last_day = now.date() if now.time() < close else None
+            finished = df.index.date != last_day
+        if not finished.all():
+            notices.append({"code": "unfinished_candle", "message": "The latest candle is still forming, so it was left out."})
+            df = df[finished]
     if df.empty:
-        raise ValueError("no candles inside the trading session")
-    return df
+        raise ValueError("no finished candles inside the trading session and test period")
+    return df, notices
 
 
 # ---------------------------------------------------------------- rule evaluation
@@ -128,7 +153,16 @@ class _Evaluator:
             params = op.model_dump(include={"period", "fast", "slow", "signal", "std", "multiplier", "minutes"})
             key = f"{op.name}|{sorted(params.items())}|{op.output}"
             if key not in self._cache:
-                self._cache[key] = indicators.compute(self.df, op.name, params, op.output, self.session.open)
+                series = indicators.compute(
+                    self.df, op.name, params, op.output, self.session.open,
+                    indicators.INTERVAL_MINUTES[self.strategy.interval],
+                )
+                if series.notna().sum() == 0:
+                    hint = " The data has no volume (Yahoo index data has none)." if self.df["volume"].sum() == 0 else ""
+                    raise ValueError(
+                        f"{op.name} has no values on this data. The test period may be too short for its settings.{hint}"
+                    )
+                self._cache[key] = series
             return self._cache[key].shift(op.bars_ago)
         return float(op.value)
 
@@ -196,12 +230,22 @@ def simulate(df: pd.DataFrame, strategy: Strategy, session: Session) -> tuple[pd
     intraday = strategy.style == "intraday"
     last_entry = dt.time.fromisoformat(session.last_entry)
     square_off = dt.time.fromisoformat(session.square_off)
+    bar_len = pd.Timedelta(minutes=indicators.INTERVAL_MINUTES[strategy.interval] or 0)
+    # a candle that ends after square-off can't be held through: exit at its open
+    past_square_off = np.array([(ts + bar_len).time() > square_off or ts.time() >= square_off for ts in idx])
+    if bar_len:
+        past_square_off |= np.array([(ts + bar_len).date() != ts.date() for ts in idx])
     sgn = 1 if strategy.side == "long" else -1
     slip = strategy.costs.slippage_pct / 100
     risk = strategy.risk
 
     def fees(price: float, qty: int) -> float:
         return strategy.costs.brokerage_per_order + price * qty * strategy.costs.charges_pct / 100
+
+    def affordable(budget: float, fill: float) -> int:
+        """Most units whose cost plus entry fees fits in the budget."""
+        per_unit = fill * (1 + strategy.costs.charges_pct / 100)
+        return max(0, math.floor((budget - strategy.costs.brokerage_per_order) / per_unit))
 
     def dist(d: Distance, ref: float, i: int, stop_dist: float | None) -> float:
         if d.unit == "percent":
@@ -213,6 +257,7 @@ def simulate(df: pd.DataFrame, strategy: Strategy, session: Session) -> tuple[pd
         return d.value * (stop_dist or 0.0)
 
     trades: list[dict] = []
+    in_market = np.zeros(n, dtype=bool)
     notices: list[dict] = []
     equity = np.empty(n)
     realized = 0.0
@@ -236,12 +281,12 @@ def simulate(df: pd.DataFrame, strategy: Strategy, session: Session) -> tuple[pd
                 "exit_time": idx[i],
                 "side": strategy.side,
                 "quantity": qty,
-                "entry_price": round(pos["fill"], 4),
-                "exit_price": round(fill, 4),
-                "gross_pnl": round(gross, 2),
-                "costs": round(slippage_cost + fee, 2),
-                "pnl": round(net, 2),
-                "return_pct": round(100 * net / (pos["fill"] * qty), 4),
+                "entry_price": pos["fill"],
+                "exit_price": fill,
+                "gross_pnl": gross,
+                "costs": slippage_cost + fee,
+                "pnl": net,
+                "return_pct": 100 * net / (pos["fill"] * qty),
                 "bars_held": i - pos["i"] + 1,
                 "exit_reason": reason,
             }
@@ -250,14 +295,16 @@ def simulate(df: pd.DataFrame, strategy: Strategy, session: Session) -> tuple[pd
 
     for i in range(n):
         t = times[i]
-        if pos is not None and intraday and t >= square_off:
+        if pos is not None:
+            in_market[i] = True
+        if pos is not None and intraday and past_square_off[i]:
             close_position(i, o[i], "square_off")
         if pos is not None and i > 0 and exit_sig[i - 1]:
             close_position(i, o[i], "exit_rule")
 
         if pos is None and i > 0 and entry_sig[i - 1]:
             allowed = True
-            if intraday and (dates[i] != dates[i - 1] or t >= last_entry):
+            if intraday and (dates[i] != dates[i - 1] or t >= last_entry or past_square_off[i]):
                 allowed = False
             cap = strategy.max_trades_per_day
             if cap is not None and trades_per_day.get(dates[i], 0) >= cap:
@@ -268,7 +315,7 @@ def simulate(df: pd.DataFrame, strategy: Strategy, session: Session) -> tuple[pd
                 if strategy.sizing.method == "fixed_quantity":
                     qty = int(strategy.sizing.value)
                 else:
-                    qty = math.floor((strategy.capital + realized) * strategy.sizing.value / 100 / fill)
+                    qty = affordable((strategy.capital + realized) * strategy.sizing.value / 100, fill)
                 stop_d = dist(risk.stop_loss, fill, i - 1, None) if risk.stop_loss else None
                 tp_d = dist(risk.take_profit, fill, i - 1, stop_d) if risk.take_profit else None
                 trail_d = dist(risk.trailing_stop, fill, i - 1, None) if risk.trailing_stop else None
@@ -289,6 +336,7 @@ def simulate(df: pd.DataFrame, strategy: Strategy, session: Session) -> tuple[pd
                         "best": fill,
                     }
                     trades_per_day[dates[i]] = trades_per_day.get(dates[i], 0) + 1
+                    in_market[i] = True
 
         if pos is not None:
             stop = pos["stop"]
@@ -296,11 +344,11 @@ def simulate(df: pd.DataFrame, strategy: Strategy, session: Session) -> tuple[pd
                 trail_level = pos["best"] - sgn * pos["trail"]
                 stop = trail_level if stop is None else (max(stop, trail_level) if sgn == 1 else min(stop, trail_level))
             target = pos["target"]
-            gap_ok = i > pos["i"]
             hit_stop = stop is not None and (l[i] <= stop if sgn == 1 else h[i] >= stop)
             hit_target = target is not None and (h[i] >= target if sgn == 1 else l[i] <= target)
-            gapped_stop = gap_ok and stop is not None and (o[i] <= stop if sgn == 1 else o[i] >= stop)
-            gapped_target = gap_ok and target is not None and (o[i] >= target if sgn == 1 else o[i] <= target)
+            # the open is the first tradable price: if it is already past a level, that is the fill
+            gapped_stop = stop is not None and (o[i] <= stop if sgn == 1 else o[i] >= stop)
+            gapped_target = target is not None and (o[i] >= target if sgn == 1 else o[i] <= target)
             stop_reason = "trailing_stop" if pos["trail"] is not None and stop != pos["stop"] else "stop_loss"
             if gapped_stop:
                 close_position(i, o[i], stop_reason)
@@ -336,7 +384,8 @@ def simulate(df: pd.DataFrame, strategy: Strategy, session: Session) -> tuple[pd
         "entry_time", "exit_time", "side", "quantity", "entry_price", "exit_price",
         "gross_pnl", "costs", "pnl", "return_pct", "bars_held", "exit_reason",
     ]
-    return pd.DataFrame(trades, columns=cols), pd.Series(equity, index=idx, name="equity"), notices
+    trades_df = pd.DataFrame(trades, columns=cols)
+    return trades_df, pd.Series(equity, index=idx, name="equity"), in_market, notices
 
 
 # ---------------------------------------------------------------- top level
@@ -367,10 +416,10 @@ def run(strategy: Strategy, provider: DataProvider, data: LoadedData | None = No
     if data is None:
         data = provider.load(strategy.symbol, strategy.interval, start, end, strategy.market)
     notices += data.notices
-    df = prepare(data.frame, strategy, session)
-    trades, equity, sim_notices = simulate(df, strategy, session)
-    notices += sim_notices
-    metrics = compute_metrics(trades, equity, strategy.capital, strategy.interval)
+    df, prep_notices = prepare(data.frame, strategy, session, start, end)
+    trades, equity, in_market, sim_notices = simulate(df, strategy, session)
+    notices += prep_notices + sim_notices
+    metrics = compute_metrics(trades, equity, strategy.capital, in_market)
     bench = None
     if len(df) > 1:
         bench = round(100 * (df["close"].iloc[-1] / df["open"].iloc[0] - 1), 2)

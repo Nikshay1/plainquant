@@ -135,8 +135,9 @@ $('run').onclick = async () => {
   $('runError').textContent = '';
   busy($('run'), true, 'Running...');
   try {
-    let s = current;
-    try { s = JSON.parse($('json').value); } catch {}
+    let s;
+    try { s = JSON.parse($('json').value); }
+    catch (err) { throw new Error('The strategy JSON is not valid: ' + err.message); }
     showResults(await api('/api/backtest', {strategy: s}));
   } catch (e) { $('runError').textContent = e.message; }
   busy($('run'), false, 'Run backtest');
