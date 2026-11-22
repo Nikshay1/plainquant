@@ -109,15 +109,17 @@ Indicators (use only these names; only set the params listed):
 {indicators.describe()}
 
 Guidance:
-- Symbols: write NSE names as the trader says them (RELIANCE, TCS, HDFCBANK). Indices: NIFTY, BANKNIFTY, FINNIFTY, SENSEX. Set market to "us" for US tickers.
+- Symbols: write NSE names as the trader says them (RELIANCE, TCS, HDFCBANK). A short uppercase word that is not an indicator is a ticker, even if it is 2 or 3 letters (LT = Larsen & Toubro, ITC, SBIN, M&M). Map company names to NSE tickers (Larsen & Toubro -> LT, State Bank -> SBIN). Indices: NIFTY, BANKNIFTY, FINNIFTY, SENSEX. Set market to "us" for US tickers.
 - "X crosses above Y" -> crosses_above. "RSI oversold bounce/reversal" -> rsi crosses_above 30 (long) or rsi crosses_below 70 (short).
 - Breakouts: "close above the 20-day high" -> close > highest(20). highest/lowest already exclude the current candle.
 - Opening range breakout: close crosses_above orb_high with minutes = the range length.
 - "Supertrend turns up" -> supertrend output "direction" crosses_above value 0.
 - Periods: "last 1 year" -> period.lookback_days 365; "5 years" -> 1825; exact dates -> start/end (YYYY-MM-DD).
-- Candles: "5-min" -> interval "5m". Use style "intraday" for intraday candles unless the trader says to hold overnight or positional.
+- Candles: "5-min" -> interval "5m". With candles of 1 hour or shorter, ALWAYS set style "intraday" unless the trader explicitly says to hold overnight, swing or positional.
+- Timed trades: orders fill at the NEXT candle's open, so "buy at 9:20" on 5-minute candles is a time_window 09:15-09:20 (the candle that closes at 9:20). "Exit at 3:15" means session.square_off 15:15, not an exit rule. Only change session fields the trader asks for, keep the market's other session times, and keep last_entry later than any entry time.
+- Named setups come with their usual exit unless the trader gives another: golden cross exits on the death cross (SMA 50 crosses below SMA 200), a Supertrend buy exits when Supertrend turns down. List that exit in assumptions.
 - Fill in missing settings with sensible defaults (daily candles, last 1 year, long side, 100% of capital per trade, 100000 capital) and list EVERY value you chose that the trader did not state in `assumptions`.
-- Keep the trader's numbers exactly. Do not add stops, targets or filters they did not ask for.
+- Keep the trader's numbers and candle size exactly ("daily chart" means interval "1d"). Do not add stops, targets, time_window or weekday rules, or exits they did not ask for.
 - Give the strategy a short descriptive name.
 
 Decline (outcome "decline") when the strategy cannot be tested faithfully, with decline_code, a one-sentence decline_reason, and a testable suggestion:
@@ -173,8 +175,27 @@ _EXAMPLE = {
 }
 
 
+def _compact_schema(o):
+    """The JSON Schema without titles, descriptions or null branches: about 40% fewer tokens.
+
+    The system prompt already explains every field, and free tiers have small per-minute token limits.
+    """
+    if isinstance(o, dict):
+        o = {k: _compact_schema(v) for k, v in o.items() if k not in ("title", "description")}
+        branches = o.get("anyOf")
+        if branches and len(branches) == 2 and {"type": "null"} in branches:
+            rest = next(x for x in branches if x != {"type": "null"})
+            o = {**{k: v for k, v in o.items() if k != "anyOf"}, **rest}
+            if "default" in o and o["default"] is None:
+                del o["default"]
+        return o
+    if isinstance(o, list):
+        return [_compact_schema(x) for x in o]
+    return o
+
+
 def _openai_instructions() -> str:
-    schema = json.dumps(ParseResult.model_json_schema(), separators=(",", ":"))
+    schema = json.dumps(_compact_schema(ParseResult.model_json_schema()), separators=(",", ":"))
     return (
         SYSTEM_PROMPT
         + "\nReply with ONE JSON object and nothing else. It must match this JSON Schema:\n"
@@ -190,6 +211,12 @@ def _openai_instructions() -> str:
 def semantic_errors(s: Strategy) -> list[str]:
     """Problems the JSON schema cannot catch but the engine would reject."""
     errors = []
+    if s.session is not None:
+        for r in s.entry.rules:
+            if isinstance(r, TimeWindowRule) and r.start >= s.session.last_entry:
+                errors.append(
+                    f"entry time_window starts at {r.start}, but session.last_entry is {s.session.last_entry}, so it can never fill"
+                )
     rule_sets = [s.entry] + ([s.exit] if s.exit else [])
     for rs in rule_sets:
         for r in rs.rules:
@@ -228,7 +255,7 @@ def _anthropic_chat(cfg: LLMConfig, messages: list[dict]) -> str:
         import anthropic
     except ImportError as e:  # pragma: no cover
         raise LLMNotConfigured("Install the Claude client: pip install 'plainquant[anthropic]'") from e
-    client = anthropic.Anthropic(api_key=cfg.api_key) if cfg.api_key else anthropic.Anthropic()
+    client = anthropic.Anthropic(api_key=cfg.api_key, max_retries=6) if cfg.api_key else anthropic.Anthropic(max_retries=6)
     # The strategy schema is beyond the size limits of constrained decoding, so the schema goes in the
     # prompt and the reply is validated (and repaired) locally, the same way as other providers.
     kwargs = {"model": cfg.model, "max_tokens": 16000, "system": _openai_instructions(), "messages": messages}
@@ -248,7 +275,8 @@ def _openai_chat(cfg: LLMConfig, messages: list[dict]) -> str:
         import openai
     except ImportError as e:  # pragma: no cover
         raise LLMNotConfigured("Install the OpenAI-compatible client: pip install 'plainquant[openai]'") from e
-    client = openai.OpenAI(base_url=cfg.base_url, api_key=cfg.api_key or "not-needed")
+    # extra retries: free tiers (e.g. Groq) answer 429 when the per-minute token budget is used up
+    client = openai.OpenAI(base_url=cfg.base_url, api_key=cfg.api_key or "not-needed", max_retries=6)
     full = [{"role": "system", "content": _openai_instructions()}] + messages
     try:
         resp = client.chat.completions.create(model=cfg.model, messages=full, response_format={"type": "json_object"})

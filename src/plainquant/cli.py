@@ -41,13 +41,13 @@ def _llm(args):
 
 
 def _report(result, args) -> None:
+    print(to_text(result))
     if args.json:
         Path(args.json).write_text(json.dumps(to_dict(result), indent=2, default=str))
         print(f"Saved {args.json}", file=sys.stderr)
     if args.html:
         Path(args.html).write_text(to_html(result))
         print(f"Saved {args.html}", file=sys.stderr)
-    print(to_text(result))
 
 
 def cmd_run(args) -> int:

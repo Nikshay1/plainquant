@@ -73,6 +73,14 @@ Pick whichever you have. Your prompt goes only to the endpoint you configure.
 | Groq | `export PLAINQUANT_PROVIDER=groq GROQ_API_KEY=... PLAINQUANT_MODEL=<model>` |
 | Any OpenAI-compatible server (vLLM, llama.cpp, ...) | `export PLAINQUANT_PROVIDER=openai PLAINQUANT_BASE_URL=<url> PLAINQUANT_MODEL=<model>` (and `PLAINQUANT_API_KEY` if it needs one) |
 
+Tested on Groq with `openai/gpt-oss-120b`: 16 of 16 test prompts were read correctly or declined
+for the right reason. That set covers simple, intraday, short, ATR, opening-range, timed and
+Hinglish prompts, plus options, pairs, fundamentals, mixed timeframes and nested logic. Smaller
+models (`gpt-oss-20b`, `qwen3.8-27b`) get the overall decision right but sometimes misread
+details, such as candle size, or add a rule nobody asked for. That's why plainquant always
+shows you the rules before running. On Groq's free tier, expect about 30 seconds per prompt
+because of its per-minute token limit.
+
 Every command also takes `--provider`, `--model` and `--base-url`. A provider's own key (such as `OPENAI_API_KEY`)
 is only ever sent to that provider; a custom endpoint gets `PLAINQUANT_API_KEY` or nothing. Small local models work
 because the strategy format is flat and the reply is validated, but larger models read

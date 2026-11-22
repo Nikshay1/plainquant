@@ -211,3 +211,30 @@ def test_hosted_key_is_not_sent_to_a_custom_endpoint(monkeypatch):
 def test_hyphenated_nse_symbols_get_the_exchange_suffix():
     assert to_ticker("BAJAJ-AUTO", "india") == "BAJAJ-AUTO.NS"
     assert to_ticker("BTC-USD", "other") == "BTC-USD"
+
+
+def test_entry_window_after_last_entry_is_sent_back_for_repair():
+    from plainquant.llm import semantic_errors
+
+    s = strat(
+        interval="5m",
+        style="intraday",
+        entry={"type": "time_window", "start": "09:20", "end": "09:25"},
+        session={"last_entry": "09:20", "square_off": "15:15"},
+    )
+    assert any("never fill" in e for e in semantic_errors(s))
+
+
+def test_compact_schema_drops_titles_and_null_branches():
+    from plainquant import llm
+
+    text = llm._openai_instructions()
+    assert '"title"' not in text and '{"type":"null"}' not in text
+    assert len(text) < 13000
+
+
+def test_daily_trade_times_are_dates():
+    from plainquant.report import to_dict
+
+    r = go(frame([100, 101, 102]))
+    assert to_dict(r)["trades"][0]["entry_time"] == "2025-01-07"

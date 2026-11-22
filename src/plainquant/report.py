@@ -38,8 +38,9 @@ def to_dict(r: BacktestResult, max_points: int = 1500) -> dict:
         eq = pd.concat([eq.iloc[::step], eq.iloc[[-1]]])
         eq = eq[~eq.index.duplicated()]
     trades = r.trades.copy()
+    daily = r.strategy.interval == "1d"
     for col in ("entry_time", "exit_time"):
-        trades[col] = trades[col].astype(str)
+        trades[col] = [str(t.date()) if daily else str(t)[:16] for t in trades[col]]
     for col, nd in (("entry_price", 4), ("exit_price", 4), ("gross_pnl", 2), ("costs", 2), ("pnl", 2), ("return_pct", 4)):
         trades[col] = trades[col].astype(float).round(nd)
     return {
