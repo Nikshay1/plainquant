@@ -4,83 +4,243 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>plainquant</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Cpath d=%22M1 13 6 8l3 3 6-7%22 fill=%22none%22 stroke=%22%231f5fbf%22 stroke-width=%222%22/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Cg fill=%22%23ff7a45%22%3E%3Ccircle cx=%222%22 cy=%2213%22 r=%221.4%22/%3E%3Ccircle cx=%226%22 cy=%229%22 r=%221.4%22/%3E%3Ccircle cx=%2210%22 cy=%2211%22 r=%221.4%22/%3E%3Ccircle cx=%2214%22 cy=%223%22 r=%221.4%22/%3E%3C/g%3E%3C/svg%3E">
 <style>
-:root{--bg:#fbfbf9;--panel:#ffffff;--fg:#1d1d1b;--muted:#6b6b66;--line:#e4e3de;--up:#127a4a;--down:#b3261e;--accent:#1f5fbf;--accent-fg:#fff;--warn:#8a5a00;--warn-bg:#fff6e0}
-@media (prefers-color-scheme:dark){:root{--bg:#141413;--panel:#1c1c1a;--fg:#ecebe6;--muted:#9a9993;--line:#2f2f2c;--up:#3fbf7f;--down:#ef6b61;--accent:#7aa7ff;--accent-fg:#0d0d0c;--warn:#ffcf70;--warn-bg:#2b2412}}
+@font-face{font-family:Doto;src:url(/assets/Doto.woff2) format("woff2");font-weight:100 900;font-display:swap}
+@font-face{font-family:"Geist Mono";src:url(/assets/GeistMono.woff2) format("woff2");font-weight:100 900;font-display:swap}
+:root{
+  color-scheme:dark;
+  --bg:#060607;--panel:#0c0c0e;--panel-2:#121215;--fg:#ececee;--muted:#8a8a93;--faint:#55555d;
+  --line:#232328;--line-2:#34343b;
+  --blue:#3d5cff;--blue-deep:#0d1a8c;--red:#ff3b4e;--orange:#ff9a3d;
+  --up:#4fe0a0;--down:#ff5c6c;
+  --mono:"Geist Mono",ui-monospace,"SF Mono",Menlo,monospace;--dots:Doto,"Geist Mono",monospace;
+}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
-main{max-width:1040px;margin:0 auto;padding:28px 16px 64px}
-h1{font-size:26px;margin:0}h2{font-size:17px;margin:0 0 10px}
-.muted{color:var(--muted)}.small{font-size:13px}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-top:16px}
-textarea{width:100%;min-height:90px;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg);font:inherit;resize:vertical}
-textarea.code{font:12.5px/1.45 ui-monospace,Menlo,monospace;min-height:260px}
-button{font:inherit;border-radius:8px;padding:8px 14px;border:1px solid var(--line);background:var(--panel);color:var(--fg);cursor:pointer}
-button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg);font-weight:600}
-button:disabled{opacity:.55;cursor:progress}
-.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
-.chip{font-size:13px;padding:5px 10px;border-radius:999px}
-.banner{background:var(--warn-bg);color:var(--warn);border-radius:8px;padding:10px 12px;white-space:pre-wrap;font-size:13px;margin-top:12px}
-.error{color:var(--down);white-space:pre-wrap}
-ul{margin:6px 0;padding-left:20px}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin:12px 0}
-.tile{border:1px solid var(--line);border-radius:8px;padding:10px}.tile b{display:block;font-size:19px;font-variant-numeric:tabular-nums}
-svg{width:100%;height:240px;display:block}
-.chart{border:1px solid var(--line);border-radius:8px;padding:4px}
-table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
-td,th{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+html{background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.6 var(--mono);-webkit-font-smoothing:antialiased}
+a{color:inherit}
+::selection{background:var(--blue);color:#fff}
+.hidden{display:none!important}
+.muted{color:var(--muted)}.small{font-size:12px}
+.up{color:var(--up)}.down{color:var(--down)}
+
+/* bracket corners */
+.br{--c:var(--line-2);--s:9px;position:relative;background:
+  linear-gradient(var(--c),var(--c)) top left/var(--s) 1px,linear-gradient(var(--c),var(--c)) top left/1px var(--s),
+  linear-gradient(var(--c),var(--c)) top right/var(--s) 1px,linear-gradient(var(--c),var(--c)) top right/1px var(--s),
+  linear-gradient(var(--c),var(--c)) bottom left/var(--s) 1px,linear-gradient(var(--c),var(--c)) bottom left/1px var(--s),
+  linear-gradient(var(--c),var(--c)) bottom right/var(--s) 1px,linear-gradient(var(--c),var(--c)) bottom right/1px var(--s);
+  background-repeat:no-repeat}
+
+/* top bar */
+header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:24px;padding:14px 28px;background:rgba(6,6,7,.82);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.logo{display:flex;align-items:center;gap:10px;text-decoration:none;font-weight:500;letter-spacing:.02em}
+.logo svg{width:22px;height:22px}
+nav{display:flex;gap:28px;margin:0 auto;font-size:13px}
+nav a{color:var(--muted);text-decoration:none;transition:color .15s}
+nav a:hover{color:var(--fg)}
+.model{display:flex;align-items:center;gap:8px;padding:7px 14px;font-size:12px;white-space:nowrap;max-width:320px;overflow:hidden;text-overflow:ellipsis}
+.model i{width:7px;height:7px;border-radius:50%;background:var(--faint);flex:none}
+.model.on i{background:var(--up);box-shadow:0 0 8px var(--up)}
+
+/* hero */
+.hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);min-height:calc(100vh - 57px);border-bottom:1px solid var(--line)}
+.hero-left{position:relative;display:flex;flex-direction:column;justify-content:center;padding:56px 48px 40px;border-right:1px solid var(--line);
+  background:radial-gradient(circle,#1d1d22 1px,transparent 1.2px) 0 0/22px 22px}
+.hero-left::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,var(--bg) 0%,rgba(6,6,7,.85) 55%,rgba(6,6,7,.6));pointer-events:none}
+.hero-left>*{position:relative}
+.eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+h1{font:700 clamp(42px,5.2vw,80px)/1 var(--dots);margin:14px 0 22px;letter-spacing:-.01em}
+.lede{max-width:520px;color:#b9b9c0;margin:0 0 26px;font-size:15px}
+.prompt{padding:14px;background-color:rgba(12,12,14,.9)}
+.prompt label{display:block;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+textarea{width:100%;border:0;outline:0;background:transparent;color:var(--fg);font:14px/1.55 var(--mono);resize:vertical;min-height:78px}
+textarea::placeholder{color:var(--faint)}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:16px}
+button{font:13px var(--mono);color:var(--fg);cursor:pointer;border:0;padding:11px 18px;background-color:var(--panel-2);transition:background-color .15s,color .15s}
+button:hover{background-color:#1b1b20}
+button:focus-visible,a:focus-visible{outline:1px solid var(--orange);outline-offset:3px}
+button.primary{--c:#8fa1ff;color:#fff;background-color:var(--blue-deep);
+  background-image:radial-gradient(circle,rgba(110,135,255,.55) .9px,transparent 1.3px),
+  linear-gradient(var(--c),var(--c)),linear-gradient(var(--c),var(--c)),linear-gradient(var(--c),var(--c)),linear-gradient(var(--c),var(--c)),
+  linear-gradient(var(--c),var(--c)),linear-gradient(var(--c),var(--c)),linear-gradient(var(--c),var(--c)),linear-gradient(var(--c),var(--c));
+  background-size:4px 4px,9px 1px,1px 9px,9px 1px,1px 9px,9px 1px,1px 9px,9px 1px,1px 9px;
+  background-position:0 0,top left,top left,top right,top right,bottom left,bottom left,bottom right,bottom right;
+  background-repeat:repeat,no-repeat,no-repeat,no-repeat,no-repeat,no-repeat,no-repeat,no-repeat,no-repeat}
+button.primary:hover{background-color:#1630c4}
+button:disabled{opacity:.5;cursor:progress}
+.examples-label{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-top:22px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.chips button{padding:6px 11px;font-size:12px;color:#c9c9cf;background-color:transparent;border:1px solid var(--line)}
+.chips button:hover{border-color:var(--orange);color:var(--fg)}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:44px}
+.stat{padding:14px 8px;text-align:center;background-color:rgba(18,18,21,.85)}
+.stat b{display:block;font:600 28px/1 var(--dots);margin-bottom:6px}
+.stat span{font-size:10.5px;color:var(--muted);line-height:1.3;display:block}
+.hero-right{position:relative;overflow:hidden;background:linear-gradient(180deg,#000 0%,#02020a 55%,#0a0830 100%)}
+.jet{position:absolute;top:0;right:0;height:100%;aspect-ratio:580/716;max-width:none;animation:drift 9s ease-in-out infinite alternate;
+  -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 14%);mask-image:linear-gradient(90deg,transparent 0,#000 14%)}
+.jet img{display:block;width:100%;height:100%}
+@keyframes drift{from{transform:translate(0,0)}to{transform:translate(6px,-8px)}}
+.callout{position:absolute;transform:translate(-50%,-50%);min-width:19%;font-size:10px;line-height:1.35;padding:6px 9px;text-align:center;background:#050507;border:1px solid #3a3a44;color:#d7d7de;pointer-events:none;white-space:nowrap}
+.callout::after{content:"";position:absolute;top:50%;width:22px;height:1px;background:#4a4a55}
+.callout.l::after{right:100%}.callout.r::after{left:100%}
+.callout em{display:block;font-style:normal;color:var(--muted)}
+
+/* banner + errors */
+.banner{margin-top:18px;padding:12px 14px;font-size:12px;white-space:pre;overflow-x:auto;color:#ffd9a8;background-color:rgba(255,154,61,.07);--c:var(--orange)}
+.error{color:var(--down);white-space:pre-wrap;font-size:13px;margin-top:12px}
+.error:empty{display:none}
+
+/* sections */
+section.step{max-width:1180px;margin:0 auto;padding:72px 28px 8px}
+.step-head{display:flex;align-items:baseline;gap:18px;margin-bottom:22px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.step-head .num{font:700 40px/1 var(--dots);color:var(--orange)}
+.step-head h2{font:500 20px/1.2 var(--mono);margin:0}
+.step-head p{margin:0 0 0 auto;font-size:12px;color:var(--muted)}
+.card{padding:22px;background-color:var(--panel)}
+.rules{list-style:none;margin:0;padding:0}
+.rules li{display:grid;grid-template-columns:18px 1fr;gap:10px;padding:9px 0;border-bottom:1px dashed var(--line)}
+.rules li:last-child{border-bottom:0}
+.rules li::before{content:"";width:6px;height:6px;margin-top:8px;background:var(--orange);border-radius:50%;box-shadow:0 0 6px var(--orange)}
+.assume{margin-top:18px}
+.assume h3,.sub{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:500;margin:0 0 8px}
+.assume ul{margin:0;padding-left:18px;color:#c1c1c8;font-size:13px}
+.assume b{color:var(--fg);font-weight:500}
+.decline{padding:16px;color:#ffc2c8;--c:var(--red);background-color:rgba(255,59,78,.06)}
+.decline p{margin:0 0 6px}
+details{margin-top:18px}
+summary{cursor:pointer;color:var(--muted);font-size:12.5px}
+summary:hover{color:var(--fg)}
+textarea.code{margin-top:12px;padding:14px;min-height:280px;font-size:12.5px;line-height:1.5;background:#08080a;border:1px solid var(--line)}
+
+/* results */
+.meta{font-size:12px;color:var(--muted);margin:-8px 0 18px}
+.tiles{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.tile{padding:16px 14px;background-color:var(--panel)}
+.tile span{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.tile b{display:block;font:700 30px/1.1 var(--dots);margin-top:8px;font-variant-numeric:tabular-nums;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chart{margin-top:8px;padding:16px 16px 10px;background-color:var(--panel)}
+.chart canvas{width:100%;height:280px;display:block}
+.chart .ends{display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted);margin-top:8px}
+.notices{margin-top:14px;font-size:12.5px;color:#c1c1c8}
+.notices ul{margin:6px 0 0;padding-left:18px}
+.wrap{overflow-x:auto;margin-top:8px;border:1px solid var(--line)}
+table{width:100%;border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums}
+th{font-weight:500;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);background:var(--panel)}
+td,th{padding:9px 12px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+tbody tr:hover td{background:#0f0f12}
 td:nth-child(-n+2),th:nth-child(-n+2),td:last-child,th:last-child{text-align:left}
-.wrap{overflow-x:auto}.up{color:var(--up)}.down{color:var(--down)}
-details summary{cursor:pointer;color:var(--muted);margin-top:10px}
-.hidden{display:none}
+footer{max-width:1180px;margin:72px auto 0;padding:22px 28px 40px;border-top:1px solid var(--line);display:flex;gap:16px;justify-content:space-between;flex-wrap:wrap;font-size:11.5px;color:var(--faint)}
+
+@media (max-width:1100px){.tiles{grid-template-columns:repeat(3,1fr)}}
+@media (max-width:900px){
+  nav{display:none}header{justify-content:space-between;padding:12px 16px}
+  .hero{grid-template-columns:minmax(0,1fr);min-height:0}
+  .hero-left{padding:40px 16px 32px;border-right:0}
+  .hero-right{border-top:1px solid var(--line)}
+  .jet{position:relative;height:auto;width:100%;-webkit-mask-image:none;mask-image:none}
+  section.step{padding:56px 16px 8px}footer{padding:22px 16px 40px}
+  .step-head p{display:none}
+}
+@media (max-width:560px){
+  .model{max-width:170px}
+  .stats{grid-template-columns:repeat(2,1fr)}.tiles{grid-template-columns:repeat(2,1fr)}
+  .callout{font-size:8px;padding:3px 6px}.callout em,.callout::after{display:none}.tile b{font-size:24px}
+}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
 </style>
 </head>
 <body>
-<main>
-  <h1>plainquant</h1>
-  <div class="muted">Describe a trading strategy in plain English, check how it was read, then backtest it. Runs on your machine with your own model.</div>
-  <div id="status" class="banner hidden"></div>
+<header>
+  <a class="logo" href="#top" aria-label="plainquant home">
+    <svg viewBox="0 0 22 22" aria-hidden="true"><g fill="#ff9a3d"><circle cx="3" cy="17" r="1.6"/><circle cx="8" cy="12" r="1.6"/><circle cx="13" cy="14.5" r="1.6"/></g><circle cx="19" cy="5" r="1.9" fill="#3d5cff"/><g fill="#ff3b4e"><circle cx="16" cy="9.5" r="1.3"/></g></svg>
+    plainquant
+  </a>
+  <nav aria-label="Steps">
+    <a href="#top">//Describe</a><a href="#check">//Check</a><a href="#results">//Results</a><a href="https://github.com/Nikshay1/plainquant" target="_blank" rel="noopener">//Source</a>
+  </nav>
+  <div class="model br" id="model" title="The model that reads your strategy"><i></i><span id="modelLabel">Checking model…</span></div>
+</header>
 
-  <section class="panel">
-    <h2>1. Describe your strategy</h2>
-    <textarea id="prompt" placeholder="e.g. Buy Nifty when the 9 EMA crosses above the 21 EMA on 15-min candles, 1% stop loss, 2% target, last 50 days"></textarea>
+<main id="top">
+<div class="hero">
+  <div class="hero-left">
+    <div class="eyebrow">//Plain-English backtesting</div>
+    <h1>Test Any<br>Trading Idea</h1>
+    <p class="lede">Describe a strategy the way you'd say it. Your own model turns it into rules, you check them, and a plain Python engine runs them on real candles.</p>
+
+    <div class="prompt br">
+      <label for="prompt">01 · Your strategy</label>
+      <textarea id="prompt" placeholder="Buy Nifty when the 9 EMA crosses above the 21 EMA on 15-min candles, 1% stop loss, 2% target, last 50 days"></textarea>
+    </div>
     <div class="row">
       <button class="primary" id="read">Read my strategy</button>
-      <span class="muted small">or start from an example:</span>
-      <span id="examples" class="row" style="margin:0"></span>
+      <span class="muted small">Ctrl + Enter</span>
     </div>
     <div id="parseError" class="error"></div>
-  </section>
+    <div id="status" class="banner br hidden"></div>
 
-  <section class="panel hidden" id="check">
-    <h2>2. Check the rules</h2>
+    <div class="examples-label">Or start from an example</div>
+    <div id="examples" class="chips"></div>
+
+    <div class="stats" aria-label="At a glance">
+      <div class="stat br"><b>25</b><span>Indicators built in</span></div>
+      <div class="stat br"><b>6+</b><span>Model providers</span></div>
+      <div class="stat br"><b>0</b><span>Accounts needed</span></div>
+      <div class="stat br"><b>100%</b><span>Runs on your machine</span></div>
+    </div>
+  </div>
+
+  <div class="hero-right" aria-hidden="true">
+    <div class="jet">
+      <img src="/assets/hero.webp" alt="">
+      <div class="callout r" style="left:57.1%;top:22.4%">Your model, your key<em>no subscription</em></div>
+      <div class="callout r" style="left:23.1%;top:31.9%">25 indicators<em>built in</em></div>
+      <div class="callout l" style="left:85%;top:39.7%">Next candle's open<em>fill price</em></div>
+      <div class="callout r" style="left:39%;top:82.2%">Plain English in<em>real backtest out</em></div>
+    </div>
+  </div>
+</div>
+
+<section class="step hidden" id="check">
+  <div class="step-head"><span class="num">02</span><h2>Check the rules</h2><p>This is what will run. Nothing is hidden.</p></div>
+  <div class="card br">
     <div id="decline"></div>
-    <ul id="rules"></ul>
-    <div id="assumptionsBox" class="hidden"><div class="muted small">Filled in for you:</div><ul id="assumptions"></ul></div>
+    <ul class="rules" id="rules"></ul>
+    <div id="assumptionsBox" class="assume hidden"><h3>Filled in for you</h3><ul id="assumptions"></ul></div>
     <details><summary>Edit the strategy JSON</summary>
-      <textarea id="json" class="code" spellcheck="false"></textarea>
-      <div class="row"><button id="apply">Update rules</button></div>
+      <textarea id="json" class="code" spellcheck="false" aria-label="Strategy JSON"></textarea>
+      <div class="row"><button class="br" id="apply">Update rules</button></div>
     </details>
     <div class="row"><button class="primary" id="run">Run backtest</button></div>
     <div id="runError" class="error"></div>
-  </section>
+  </div>
+</section>
 
-  <section class="panel hidden" id="results">
-    <h2>3. Results</h2>
-    <div id="meta" class="muted small"></div>
-    <div class="grid" id="tiles"></div>
-    <div class="chart" id="chart"></div>
-    <div id="notices"></div>
-    <h2 style="margin-top:16px">Trades <span id="tradeCount" class="muted"></span></h2>
-    <div class="wrap"><table id="trades"></table></div>
-  </section>
-  <p class="muted small">Past results do not predict future returns. This is a research tool, not investment advice.</p>
+<section class="step hidden" id="results">
+  <div class="step-head"><span class="num">03</span><h2>Results</h2><p>Past results don't predict future returns.</p></div>
+  <div id="meta" class="meta"></div>
+  <div class="tiles" id="tiles"></div>
+  <div class="chart br"><div class="sub">Equity</div><div id="chart"></div></div>
+  <div id="notices" class="notices"></div>
+  <div class="sub" style="margin-top:28px">Trades <span id="tradeCount"></span></div>
+  <div class="wrap"><table id="trades"></table></div>
+</section>
 </main>
+
+<footer>
+  <span>plainquant · MIT · runs locally, prompts go only to the model you set</span>
+  <span>A research tool, not investment advice.</span>
+</footer>
+
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmt = v => v === null || v === undefined ? '-' : (typeof v === 'number' ? v.toLocaleString(undefined, {maximumFractionDigits: 2}) : v);
+const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
 let current = null;
 
 async function api(path, body) {
@@ -91,14 +251,15 @@ async function api(path, body) {
 }
 
 function busy(btn, on, label) { btn.disabled = on; if (label) btn.textContent = label; }
+function reveal(el) { el.classList.remove('hidden'); el.scrollIntoView({behavior: calm ? 'auto' : 'smooth', block: 'start'}); }
 
 function showCheck(strategy, rules, assumptions, decline) {
-  $('check').classList.remove('hidden');
   $('results').classList.add('hidden');
   $('runError').textContent = '';
   if (decline) {
-    $('decline').innerHTML = `<p class="error">Can't test this as written: ${esc(decline.reason)}</p>${decline.suggestion ? `<p>Try instead: ${esc(decline.suggestion)}</p>` : ''}`;
+    $('decline').innerHTML = `<div class="decline br"><p>Can't test this as written: ${esc(decline.reason)}</p>${decline.suggestion ? `<p class="muted">Try instead: ${esc(decline.suggestion)}</p>` : ''}</div>`;
     $('rules').innerHTML = ''; $('assumptionsBox').classList.add('hidden'); $('run').disabled = true; $('json').value = '';
+    reveal($('check'));
     return;
   }
   $('decline').innerHTML = '';
@@ -108,12 +269,12 @@ function showCheck(strategy, rules, assumptions, decline) {
   $('assumptionsBox').classList.toggle('hidden', !assumptions?.length);
   $('assumptions').innerHTML = (assumptions || []).map(a => `<li><b>${esc(a.field)}</b> = ${esc(a.value)} <span class="muted">(${esc(a.reason)})</span></li>`).join('');
   $('json').value = JSON.stringify(strategy, null, 2);
-  $('check').scrollIntoView({behavior: 'smooth', block: 'start'});
+  reveal($('check'));
 }
 
 $('read').onclick = async () => {
   $('parseError').textContent = '';
-  busy($('read'), true, 'Reading...');
+  busy($('read'), true, 'Reading…');
   try {
     const r = await api('/api/parse', {prompt: $('prompt').value});
     if (r.outcome === 'decline') showCheck(null, [], [], {reason: r.decline_reason, suggestion: r.suggestion});
@@ -121,6 +282,7 @@ $('read').onclick = async () => {
   } catch (e) { $('parseError').textContent = e.message; }
   busy($('read'), false, 'Read my strategy');
 };
+$('prompt').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) $('read').click(); });
 
 $('apply').onclick = async () => {
   $('runError').textContent = '';
@@ -134,7 +296,7 @@ $('apply').onclick = async () => {
 
 $('run').onclick = async () => {
   $('runError').textContent = '';
-  busy($('run'), true, 'Running...');
+  busy($('run'), true, 'Running…');
   try {
     let s;
     try { s = JSON.parse($('json').value); }
@@ -144,43 +306,73 @@ $('run').onclick = async () => {
   busy($('run'), false, 'Run backtest');
 };
 
+// Colour along the blue -> red -> orange ramp, t in [0, 1].
+const RAMP = [[61, 92, 255], [140, 60, 230], [255, 59, 78], [255, 154, 61]];
+function ramp(t) {
+  t = Math.max(0, Math.min(1, t)) * (RAMP.length - 1);
+  const i = Math.min(RAMP.length - 2, Math.floor(t)), f = t - i, a = RAMP[i], b = RAMP[i + 1];
+  return a.map((v, k) => Math.round(v + (b[k] - v) * f));
+}
+function fitCanvas(c) {
+  const r = c.getBoundingClientRect(), d = Math.min(2, devicePixelRatio || 1);
+  c.width = Math.max(1, r.width * d); c.height = Math.max(1, r.height * d);
+  const g = c.getContext('2d'); g.setTransform(d, 0, 0, d, 0, 0);
+  return {g, w: r.width, h: r.height};
+}
+
+// Equity curve drawn as a dot matrix: each column is a dot stack from the baseline to the value.
 function curve(points) {
-  if (points.length < 2) return '<p class="muted">Not enough data to draw.</p>';
-  const v = points.map(p => p.v), lo = Math.min(...v), hi = Math.max(...v), W = 1000, H = 240, pad = 12;
-  const x = i => pad + i * (W - 2 * pad) / (v.length - 1), y = a => H - pad - (a - lo) * (H - 2 * pad) / ((hi - lo) || 1);
-  const d = v.map((a, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(a).toFixed(1)).join('');
-  const up = v[v.length - 1] >= v[0];
-  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Equity curve from ${fmt(v[0])} to ${fmt(v[v.length-1])}">
-    <line x1="${pad}" x2="${W-pad}" y1="${y(v[0])}" y2="${y(v[0])}" stroke="var(--line)" stroke-dasharray="4 4" vector-effect="non-scaling-stroke"/>
-    <path d="${d}" fill="none" stroke="var(${up ? '--up' : '--down'})" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>
-    <div class="row small muted" style="justify-content:space-between;margin:0 6px 4px"><span>${esc(points[0].t.slice(0,10))} · ${fmt(v[0])}</span><span>${esc(points[points.length-1].t.slice(0,10))} · ${fmt(v[v.length-1])}</span></div>`;
+  if (points.length < 2) { $('chart').innerHTML = '<p class="muted">Not enough data to draw.</p>'; return; }
+  const v = points.map(p => p.v);
+  $('chart').innerHTML = `<canvas role="img" aria-label="Equity curve from ${fmt(v[0])} to ${fmt(v[v.length-1])}"></canvas>
+    <div class="ends"><span>${esc(points[0].t.slice(0,10))} · ${fmt(v[0])}</span><span>${esc(points[points.length-1].t.slice(0,10))} · ${fmt(v[v.length-1])}</span></div>`;
+  const c = $('chart').querySelector('canvas');
+  const draw = () => {
+    const {g, w, h} = fitCanvas(c), step = 6, cols = Math.max(2, Math.floor(w / step)), pad = 6;
+    const lo = Math.min(...v), hi = Math.max(...v), span = (hi - lo) || 1;
+    const y = a => h - pad - (a - lo) * (h - 2 * pad) / span, base = y(v[0]);
+    g.clearRect(0, 0, w, h);
+    for (let yy = pad; yy < h; yy += step) for (let x = step / 2; x < w; x += step) { g.fillStyle = '#16161a'; g.fillRect(x - .5, yy - .5, 1, 1); }
+    g.setLineDash([2, 4]); g.strokeStyle = '#3a3a44'; g.beginPath(); g.moveTo(0, base); g.lineTo(w, base); g.stroke(); g.setLineDash([]);
+    for (let i = 0; i < cols; i++) {
+      const val = v[Math.round(i * (v.length - 1) / (cols - 1))], top = y(val), x = i * (w - step) / (cols - 1) + step / 2;
+      const [r, gg, b] = ramp(i / (cols - 1)), dir = top < base ? 1 : -1;
+      for (let yy = base; dir > 0 ? yy >= top : yy <= top; yy -= dir * step) {
+        const k = Math.abs(yy - base) / (Math.abs(top - base) || 1);
+        g.fillStyle = `rgba(${r},${gg},${b},${0.12 + 0.55 * k})`;
+        g.beginPath(); g.arc(x, yy, 1.4, 0, 7); g.fill();
+      }
+      g.fillStyle = `rgb(${r},${gg},${b})`; g.beginPath(); g.arc(x, top, 2.1, 0, 7); g.fill();
+    }
+  };
+  draw();
+  new ResizeObserver(draw).observe(c);
 }
 
 function showResults(r) {
-  $('results').classList.remove('hidden');
   const m = r.metrics;
   $('meta').textContent = `${r.data_source} · ${r.start} to ${r.end} · ${r.bars} candles`;
   const tiles = [['Net P&L', m.net_pnl, true], ['Return %', m.net_return_pct, true], ['Buy & hold %', r.benchmark_return_pct, true],
     ['Max drawdown %', m.max_drawdown_pct, true], ['Win rate %', m.win_rate_pct], ['Trades', m.trades], ['Profit factor', m.profit_factor],
-    ['Sharpe', m.sharpe], ['Avg P&L per trade', m.expectancy, true], ['Total costs', m.total_costs]];
-  $('tiles').innerHTML = tiles.map(([k, v, signed]) => `<div class="tile"><span class="muted small">${k}</span><b class="${signed && typeof v === 'number' ? (v >= 0 ? 'up' : 'down') : ''}">${fmt(v)}</b></div>`).join('');
-  $('chart').innerHTML = curve(r.equity);
-  $('notices').innerHTML = r.notices.length ? `<div class="muted small" style="margin-top:12px">Notes:</div><ul class="small">${r.notices.map(n => `<li>${esc(n.message)}</li>`).join('')}</ul>` : '';
+    ['Sharpe', m.sharpe], ['Avg P&L / trade', m.expectancy, true], ['Total costs', m.total_costs]];
+  $('tiles').innerHTML = tiles.map(([k, v, signed]) => `<div class="tile br"><span>${k}</span><b class="${signed && typeof v === 'number' ? (v >= 0 ? 'up' : 'down') : ''}" title="${esc(fmt(v))}">${fmt(v)}</b></div>`).join('');
+  $('notices').innerHTML = r.notices.length ? `<div class="sub">Notes</div><ul>${r.notices.map(n => `<li>${esc(n.message)}</li>`).join('')}</ul>` : '';
   $('tradeCount').textContent = `(${r.trades.length})`;
-  $('trades').innerHTML = '<tr><th>Entry</th><th>Exit</th><th>Qty</th><th>Entry price</th><th>Exit price</th><th>P&L</th><th>Return %</th><th>Reason</th></tr>' +
-    r.trades.slice().reverse().map(t => `<tr><td>${esc(t.entry_time.slice(0,16))}</td><td>${esc(t.exit_time.slice(0,16))}</td><td>${t.quantity}</td><td>${fmt(t.entry_price)}</td><td>${fmt(t.exit_price)}</td><td class="${t.pnl >= 0 ? 'up' : 'down'}">${fmt(t.pnl)}</td><td>${fmt(t.return_pct)}</td><td>${esc(t.exit_reason.replace(/_/g, ' '))}</td></tr>`).join('');
-  $('results').scrollIntoView({behavior: 'smooth', block: 'start'});
+  $('trades').innerHTML = '<thead><tr><th>Entry</th><th>Exit</th><th>Qty</th><th>Entry price</th><th>Exit price</th><th>P&L</th><th>Return %</th><th>Reason</th></tr></thead><tbody>' +
+    r.trades.slice().reverse().map(t => `<tr><td>${esc(t.entry_time.slice(0,16))}</td><td>${esc(t.exit_time.slice(0,16))}</td><td>${t.quantity}</td><td>${fmt(t.entry_price)}</td><td>${fmt(t.exit_price)}</td><td class="${t.pnl >= 0 ? 'up' : 'down'}">${fmt(t.pnl)}</td><td>${fmt(t.return_pct)}</td><td>${esc(t.exit_reason.replace(/_/g, ' '))}</td></tr>`).join('') + '</tbody>';
+  reveal($('results'));
+  curve(r.equity);
 }
 
 (async () => {
   try {
     const s = await api('/api/status');
-    if (!s.llm) { $('status').textContent = s.help; $('status').classList.remove('hidden'); }
-    else { $('read').title = `Uses ${s.llm}`; }
-  } catch {}
+    if (!s.llm) { $('status').textContent = s.help; $('status').classList.remove('hidden'); $('modelLabel').textContent = 'No model set'; }
+    else { $('model').classList.add('on'); $('modelLabel').textContent = s.llm.split(' at ')[0]; $('model').title = s.llm; $('read').title = `Uses ${s.llm}`; }
+  } catch { $('modelLabel').textContent = 'Model unknown'; }
   try {
     const ex = await api('/api/examples');
-    $('examples').innerHTML = ex.map((e, i) => `<button class="chip" data-i="${i}">${esc(e.name)}</button>`).join('');
+    $('examples').innerHTML = ex.map((e, i) => `<button data-i="${i}">${esc(e.name)}</button>`).join('');
     $('examples').querySelectorAll('button').forEach(b => b.onclick = () => { const e = ex[+b.dataset.i]; showCheck(e.strategy, e.rules, []); });
   } catch {}
 })();

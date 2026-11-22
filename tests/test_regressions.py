@@ -238,3 +238,12 @@ def test_daily_trade_times_are_dates():
 
     r = go(frame([100, 101, 102]))
     assert to_dict(r)["trades"][0]["entry_time"] == "2025-01-07"
+
+
+def test_page_assets_are_bundled_and_allowlisted():
+    client = TestClient(create_app(Provider(frame([100, 100])), LLMConfig("openai", "openai", "m")))
+    for name, kind in (("Doto.woff2", "font/woff2"), ("GeistMono.woff2", "font/woff2"), ("hero.webp", "image/webp")):
+        r = client.get(f"/assets/{name}")
+        assert r.status_code == 200 and r.headers["content-type"] == kind and r.content
+    assert client.get("/assets/Doto-OFL.txt").status_code == 404
+    assert client.get("/assets/..%2Fserver.py").status_code == 404

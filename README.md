@@ -10,6 +10,8 @@ There are two reasons to use it:
 - **You bring your own model.** It works with Claude or any OpenAI-compatible endpoint, such as
   Ollama, LM Studio, OpenRouter or Groq. There's no account and no subscription.
 
+![The plainquant web app](docs/web-app.webp)
+
 It also runs entirely on your machine with no tracking. Your strategies and prompts go only to
 the model endpoint you pick.
 
@@ -35,6 +37,8 @@ Run the backtest? [Y/n]
 
 You get net P&L, return, CAGR, max drawdown, Sharpe, win rate, profit factor, every trade and
 an equity curve, in the terminal, as JSON, as a shareable HTML file or in a local web app.
+
+![Backtest results in the web app](docs/results.webp)
 
 ## How it works
 

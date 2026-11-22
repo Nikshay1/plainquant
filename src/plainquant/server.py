@@ -9,7 +9,7 @@ from __future__ import annotations
 from importlib import resources
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, ValidationError
 
 from . import examples
@@ -19,6 +19,9 @@ from .engine import run
 from .explain import explain
 from .llm import LLMConfig, LLMError, LLMNotConfigured, config_from_env, parse_strategy, semantic_errors
 from .report import to_dict
+
+# Files the page loads. Bundled so the app works offline and makes no third-party requests.
+ASSETS = {"Doto.woff2": "font/woff2", "GeistMono.woff2": "font/woff2", "hero.webp": "image/webp"}
 
 
 class PromptIn(BaseModel):
@@ -50,6 +53,15 @@ def create_app(provider: DataProvider | None = None, llm: LLMConfig | None = Non
     @app.get("/", response_class=HTMLResponse)
     def index():
         return page
+
+    web = resources.files("plainquant.web")
+
+    @app.get("/assets/{name}")
+    def asset(name: str):
+        if name not in ASSETS:
+            raise HTTPException(404)
+        headers = {"Cache-Control": "max-age=86400"}
+        return Response((web / "assets" / name).read_bytes(), media_type=ASSETS[name], headers=headers)
 
     @app.get("/api/status")
     def status():

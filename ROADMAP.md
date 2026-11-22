@@ -26,7 +26,7 @@ commit. A step is checked off only after it has been run for real, not just unit
 - [ ] Re-run on GPT-6 Luna once an OpenAI key is available.
 
 ## Step 1: Release polish
-- [ ] Screenshot or GIF of the web app in the README.
+- [x] Screenshot of the web app in the README (with the redesigned dark, dot-matrix UI).
 - [ ] Publish to PyPI so `pip install plainquant` works.
 - [ ] Tag v0.2.0 with release notes.
 
