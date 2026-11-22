@@ -1,0 +1,37 @@
+{
+  "name": "HDFCBANK 20-day breakout with ATR trail",
+  "symbol": "HDFCBANK",
+  "interval": "1d",
+  "style": "positional",
+  "period": {
+    "lookback_days": 1095
+  },
+  "entry": {
+    "match": "all",
+    "rules": [
+      {
+        "type": "compare",
+        "left": {
+          "kind": "price",
+          "field": "close"
+        },
+        "op": ">",
+        "right": {
+          "kind": "indicator",
+          "name": "highest",
+          "period": 20
+        }
+      }
+    ]
+  },
+  "risk": {
+    "stop_loss": {
+      "unit": "atr",
+      "value": 2
+    },
+    "trailing_stop": {
+      "unit": "atr",
+      "value": 3
+    }
+  }
+}

@@ -1,0 +1,48 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "plainquant"
+version = "0.1.0"
+description = "Backtest trading strategies written in plain English. Bring your own model, no subscription."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+keywords = ["backtesting", "trading", "nse", "llm", "algorithmic-trading", "ollama"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Intended Audience :: Financial and Insurance Industry",
+  "Topic :: Office/Business :: Financial :: Investment",
+]
+dependencies = [
+  "pandas>=2.1",
+  "numpy>=1.26",
+  "pydantic>=2.7",
+  "yfinance>=0.2.54",
+]
+
+[project.optional-dependencies]
+anthropic = ["anthropic>=2.12"]
+openai = ["openai>=1.40"]
+server = ["fastapi>=0.110", "uvicorn>=0.29"]
+all = ["anthropic>=2.12", "openai>=1.40", "fastapi>=0.110", "uvicorn>=0.29"]
+dev = ["pytest>=8", "httpx>=0.27", "ruff>=0.6"]
+
+[project.scripts]
+plainquant = "plainquant.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/Nikshay1/plainquant"
+Issues = "https://github.com/Nikshay1/plainquant/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/plainquant"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"

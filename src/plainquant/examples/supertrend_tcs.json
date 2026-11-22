@@ -1,0 +1,49 @@
+{
+  "name": "TCS Supertrend flip",
+  "symbol": "TCS",
+  "interval": "1d",
+  "style": "positional",
+  "period": {
+    "lookback_days": 1095
+  },
+  "entry": {
+    "match": "all",
+    "rules": [
+      {
+        "type": "compare",
+        "left": {
+          "kind": "indicator",
+          "name": "supertrend",
+          "period": 10,
+          "multiplier": 3,
+          "output": "direction"
+        },
+        "op": "crosses_above",
+        "right": {
+          "kind": "value",
+          "value": 0
+        }
+      }
+    ]
+  },
+  "exit": {
+    "match": "all",
+    "rules": [
+      {
+        "type": "compare",
+        "left": {
+          "kind": "indicator",
+          "name": "supertrend",
+          "period": 10,
+          "multiplier": 3,
+          "output": "direction"
+        },
+        "op": "crosses_below",
+        "right": {
+          "kind": "value",
+          "value": 0
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "name": "RELIANCE RSI oversold bounce",
+  "symbol": "RELIANCE",
+  "interval": "1d",
+  "style": "positional",
+  "period": {
+    "lookback_days": 1825
+  },
+  "entry": {
+    "match": "all",
+    "rules": [
+      {
+        "type": "compare",
+        "left": {
+          "kind": "indicator",
+          "name": "rsi",
+          "period": 14
+        },
+        "op": "crosses_above",
+        "right": {
+          "kind": "value",
+          "value": 30
+        }
+      }
+    ]
+  },
+  "exit": {
+    "match": "all",
+    "rules": [
+      {
+        "type": "compare",
+        "left": {
+          "kind": "indicator",
+          "name": "rsi",
+          "period": 14
+        },
+        "op": ">",
+        "right": {
+          "kind": "value",
+          "value": 70
+        }
+      }
+    ]
+  },
+  "risk": {
+    "stop_loss": {
+      "unit": "percent",
+      "value": 5
+    }
+  }
+}

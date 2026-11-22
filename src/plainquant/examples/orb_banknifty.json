@@ -1,0 +1,43 @@
+{
+  "name": "BANKNIFTY 15-minute opening range breakout",
+  "symbol": "BANKNIFTY",
+  "interval": "5m",
+  "style": "intraday",
+  "period": {
+    "lookback_days": 59
+  },
+  "entry": {
+    "match": "all",
+    "rules": [
+      {
+        "type": "compare",
+        "left": {
+          "kind": "price",
+          "field": "close"
+        },
+        "op": "crosses_above",
+        "right": {
+          "kind": "indicator",
+          "name": "orb_high",
+          "minutes": 15
+        }
+      },
+      {
+        "type": "time_window",
+        "start": "09:30",
+        "end": "11:00"
+      }
+    ]
+  },
+  "risk": {
+    "stop_loss": {
+      "unit": "percent",
+      "value": 0.5
+    },
+    "take_profit": {
+      "unit": "rr",
+      "value": 2
+    }
+  },
+  "max_trades_per_day": 1
+}

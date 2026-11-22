@@ -1,0 +1,47 @@
+{
+  "name": "NIFTY golden cross (50/200 SMA)",
+  "symbol": "NIFTY",
+  "interval": "1d",
+  "style": "positional",
+  "period": {
+    "lookback_days": 1825
+  },
+  "entry": {
+    "match": "all",
+    "rules": [
+      {
+        "type": "compare",
+        "left": {
+          "kind": "indicator",
+          "name": "sma",
+          "period": 50
+        },
+        "op": "crosses_above",
+        "right": {
+          "kind": "indicator",
+          "name": "sma",
+          "period": 200
+        }
+      }
+    ]
+  },
+  "exit": {
+    "match": "all",
+    "rules": [
+      {
+        "type": "compare",
+        "left": {
+          "kind": "indicator",
+          "name": "sma",
+          "period": 50
+        },
+        "op": "crosses_below",
+        "right": {
+          "kind": "indicator",
+          "name": "sma",
+          "period": 200
+        }
+      }
+    ]
+  }
+}

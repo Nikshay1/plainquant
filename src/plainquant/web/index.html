@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>plainquant</title>
+<style>
+:root{--bg:#fbfbf9;--panel:#ffffff;--fg:#1d1d1b;--muted:#6b6b66;--line:#e4e3de;--up:#127a4a;--down:#b3261e;--accent:#1f5fbf;--accent-fg:#fff;--warn:#8a5a00;--warn-bg:#fff6e0}
+@media (prefers-color-scheme:dark){:root{--bg:#141413;--panel:#1c1c1a;--fg:#ecebe6;--muted:#9a9993;--line:#2f2f2c;--up:#3fbf7f;--down:#ef6b61;--accent:#7aa7ff;--accent-fg:#0d0d0c;--warn:#ffcf70;--warn-bg:#2b2412}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:1040px;margin:0 auto;padding:28px 16px 64px}
+h1{font-size:26px;margin:0}h2{font-size:17px;margin:0 0 10px}
+.muted{color:var(--muted)}.small{font-size:13px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-top:16px}
+textarea{width:100%;min-height:90px;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg);font:inherit;resize:vertical}
+textarea.code{font:12.5px/1.45 ui-monospace,Menlo,monospace;min-height:260px}
+button{font:inherit;border-radius:8px;padding:8px 14px;border:1px solid var(--line);background:var(--panel);color:var(--fg);cursor:pointer}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg);font-weight:600}
+button:disabled{opacity:.55;cursor:progress}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+.chip{font-size:13px;padding:5px 10px;border-radius:999px}
+.banner{background:var(--warn-bg);color:var(--warn);border-radius:8px;padding:10px 12px;white-space:pre-wrap;font-size:13px;margin-top:12px}
+.error{color:var(--down);white-space:pre-wrap}
+ul{margin:6px 0;padding-left:20px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin:12px 0}
+.tile{border:1px solid var(--line);border-radius:8px;padding:10px}.tile b{display:block;font-size:19px;font-variant-numeric:tabular-nums}
+svg{width:100%;height:240px;display:block}
+.chart{border:1px solid var(--line);border-radius:8px;padding:4px}
+table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+td,th{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+td:nth-child(-n+2),th:nth-child(-n+2),td:last-child,th:last-child{text-align:left}
+.wrap{overflow-x:auto}.up{color:var(--up)}.down{color:var(--down)}
+details summary{cursor:pointer;color:var(--muted);margin-top:10px}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<main>
+  <h1>plainquant</h1>
+  <div class="muted">Describe a trading strategy in plain English, check how it was read, then backtest it. Runs on your machine with your own model.</div>
+  <div id="status" class="banner hidden"></div>
+
+  <section class="panel">
+    <h2>1. Describe your strategy</h2>
+    <textarea id="prompt" placeholder="e.g. Buy Nifty when the 9 EMA crosses above the 21 EMA on 15-min candles, 1% stop loss, 2% target, last 50 days"></textarea>
+    <div class="row">
+      <button class="primary" id="read">Read my strategy</button>
+      <span class="muted small">or start from an example:</span>
+      <span id="examples" class="row" style="margin:0"></span>
+    </div>
+    <div id="parseError" class="error"></div>
+  </section>
+
+  <section class="panel hidden" id="check">
+    <h2>2. Check the rules</h2>
+    <div id="decline"></div>
+    <ul id="rules"></ul>
+    <div id="assumptionsBox" class="hidden"><div class="muted small">Filled in for you:</div><ul id="assumptions"></ul></div>
+    <details><summary>Edit the strategy JSON</summary>
+      <textarea id="json" class="code" spellcheck="false"></textarea>
+      <div class="row"><button id="apply">Update rules</button></div>
+    </details>
+    <div class="row"><button class="primary" id="run">Run backtest</button></div>
+    <div id="runError" class="error"></div>
+  </section>
+
+  <section class="panel hidden" id="results">
+    <h2>3. Results</h2>
+    <div id="meta" class="muted small"></div>
+    <div class="grid" id="tiles"></div>
+    <div class="chart" id="chart"></div>
+    <div id="notices"></div>
+    <h2 style="margin-top:16px">Trades <span id="tradeCount" class="muted"></span></h2>
+    <div class="wrap"><table id="trades"></table></div>
+  </section>
+  <p class="muted small">Past results do not predict future returns. This is a research tool, not investment advice.</p>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt = v => v === null || v === undefined ? '-' : (typeof v === 'number' ? v.toLocaleString(undefined, {maximumFractionDigits: 2}) : v);
+let current = null;
+
+async function api(path, body) {
+  const res = await fetch(path, body ? {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)} : {});
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(Array.isArray(data.detail) ? data.detail.map(d => typeof d === 'string' ? d : JSON.stringify(d)).join('\n') : (data.detail || res.statusText));
+  return data;
+}
+
+function busy(btn, on, label) { btn.disabled = on; if (label) btn.textContent = label; }
+
+function showCheck(strategy, rules, assumptions, decline) {
+  $('check').classList.remove('hidden');
+  $('results').classList.add('hidden');
+  $('runError').textContent = '';
+  if (decline) {
+    $('decline').innerHTML = `<p class="error">Can't test this as written: ${esc(decline.reason)}</p>${decline.suggestion ? `<p>Try instead: ${esc(decline.suggestion)}</p>` : ''}`;
+    $('rules').innerHTML = ''; $('assumptionsBox').classList.add('hidden'); $('run').disabled = true; $('json').value = '';
+    return;
+  }
+  $('decline').innerHTML = '';
+  $('run').disabled = false;
+  current = strategy;
+  $('rules').innerHTML = rules.map(r => `<li>${esc(r)}</li>`).join('');
+  $('assumptionsBox').classList.toggle('hidden', !assumptions?.length);
+  $('assumptions').innerHTML = (assumptions || []).map(a => `<li><b>${esc(a.field)}</b> = ${esc(a.value)} <span class="muted">(${esc(a.reason)})</span></li>`).join('');
+  $('json').value = JSON.stringify(strategy, null, 2);
+  $('check').scrollIntoView({behavior: 'smooth', block: 'start'});
+}
+
+$('read').onclick = async () => {
+  $('parseError').textContent = '';
+  busy($('read'), true, 'Reading...');
+  try {
+    const r = await api('/api/parse', {prompt: $('prompt').value});
+    if (r.outcome === 'decline') showCheck(null, [], [], {reason: r.decline_reason, suggestion: r.suggestion});
+    else showCheck(r.strategy, r.rules, r.assumptions);
+  } catch (e) { $('parseError').textContent = e.message; }
+  busy($('read'), false, 'Read my strategy');
+};
+
+$('apply').onclick = async () => {
+  $('runError').textContent = '';
+  try {
+    const s = JSON.parse($('json').value);
+    const r = await api('/api/explain', {strategy: s});
+    current = s;
+    $('rules').innerHTML = r.rules.map(x => `<li>${esc(x)}</li>`).join('');
+  } catch (e) { $('runError').textContent = e.message; }
+};
+
+$('run').onclick = async () => {
+  $('runError').textContent = '';
+  busy($('run'), true, 'Running...');
+  try {
+    let s = current;
+    try { s = JSON.parse($('json').value); } catch {}
+    showResults(await api('/api/backtest', {strategy: s}));
+  } catch (e) { $('runError').textContent = e.message; }
+  busy($('run'), false, 'Run backtest');
+};
+
+function curve(points) {
+  if (points.length < 2) return '<p class="muted">Not enough data to draw.</p>';
+  const v = points.map(p => p.v), lo = Math.min(...v), hi = Math.max(...v), W = 1000, H = 240, pad = 12;
+  const x = i => pad + i * (W - 2 * pad) / (v.length - 1), y = a => H - pad - (a - lo) * (H - 2 * pad) / ((hi - lo) || 1);
+  const d = v.map((a, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(a).toFixed(1)).join('');
+  const up = v[v.length - 1] >= v[0];
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Equity curve from ${fmt(v[0])} to ${fmt(v[v.length-1])}">
+    <line x1="${pad}" x2="${W-pad}" y1="${y(v[0])}" y2="${y(v[0])}" stroke="var(--line)" stroke-dasharray="4 4" vector-effect="non-scaling-stroke"/>
+    <path d="${d}" fill="none" stroke="var(${up ? '--up' : '--down'})" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>
+    <div class="row small muted" style="justify-content:space-between;margin:0 6px 4px"><span>${esc(points[0].t.slice(0,10))} · ${fmt(v[0])}</span><span>${esc(points[points.length-1].t.slice(0,10))} · ${fmt(v[v.length-1])}</span></div>`;
+}
+
+function showResults(r) {
+  $('results').classList.remove('hidden');
+  const m = r.metrics;
+  $('meta').textContent = `${r.data_source} · ${r.start} to ${r.end} · ${r.bars} candles`;
+  const tiles = [['Net P&L', m.net_pnl, true], ['Return %', m.net_return_pct, true], ['Buy & hold %', r.benchmark_return_pct, true],
+    ['Max drawdown %', m.max_drawdown_pct, true], ['Win rate %', m.win_rate_pct], ['Trades', m.trades], ['Profit factor', m.profit_factor],
+    ['Sharpe', m.sharpe], ['Avg P&L per trade', m.expectancy, true], ['Total costs', m.total_costs]];
+  $('tiles').innerHTML = tiles.map(([k, v, signed]) => `<div class="tile"><span class="muted small">${k}</span><b class="${signed && typeof v === 'number' ? (v >= 0 ? 'up' : 'down') : ''}">${fmt(v)}</b></div>`).join('');
+  $('chart').innerHTML = curve(r.equity);
+  $('notices').innerHTML = r.notices.length ? `<div class="muted small" style="margin-top:12px">Notes:</div><ul class="small">${r.notices.map(n => `<li>${esc(n.message)}</li>`).join('')}</ul>` : '';
+  $('tradeCount').textContent = `(${r.trades.length})`;
+  $('trades').innerHTML = '<tr><th>Entry</th><th>Exit</th><th>Qty</th><th>Entry price</th><th>Exit price</th><th>P&L</th><th>Return %</th><th>Reason</th></tr>' +
+    r.trades.slice().reverse().map(t => `<tr><td>${esc(t.entry_time.slice(0,16))}</td><td>${esc(t.exit_time.slice(0,16))}</td><td>${t.quantity}</td><td>${fmt(t.entry_price)}</td><td>${fmt(t.exit_price)}</td><td class="${t.pnl >= 0 ? 'up' : 'down'}">${fmt(t.pnl)}</td><td>${fmt(t.return_pct)}</td><td>${esc(t.exit_reason.replace(/_/g, ' '))}</td></tr>`).join('');
+  $('results').scrollIntoView({behavior: 'smooth', block: 'start'});
+}
+
+(async () => {
+  try {
+    const s = await api('/api/status');
+    if (!s.llm) { $('status').textContent = s.help; $('status').classList.remove('hidden'); }
+    else { $('read').title = `Uses ${s.llm}`; }
+  } catch {}
+  try {
+    const ex = await api('/api/examples');
+    $('examples').innerHTML = ex.map((e, i) => `<button class="chip" data-i="${i}">${esc(e.name)}</button>`).join('');
+    $('examples').querySelectorAll('button').forEach(b => b.onclick = () => { const e = ex[+b.dataset.i]; showCheck(e.strategy, e.rules, []); });
+  } catch {}
+})();
+</script>
+</body>
+</html>
