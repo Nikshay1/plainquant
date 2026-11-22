@@ -30,6 +30,9 @@ Most people won't clone a repo and set environment variables to try a strategy.
 - [x] Screenshots of the web app in the README.
 - [x] 1a. Connect a model inside the app: pick a provider, paste a key, pick from the models it lists,
       saved on the user's computer. `plainquant` on its own opens the app in the browser.
+- [x] 1a+. Desktop app: double-click installers for Windows (.exe), macOS (.dmg) and Linux (AppImage),
+      built by GitHub Actions on every version tag. Same app in a native window (pywebview).
+- [ ] Sign the desktop app (Apple Developer ID, Windows code signing) so first launch has no warning.
 - [ ] 1b. Publish to PyPI so `uvx plainquant` (or `pipx run plainquant`) works with no clone. Tag v0.2.0.
 - [ ] 1c. Free hosted version on Hugging Face Spaces: open a link, try the examples, paste your own key
       (used per request, never stored). Cache Yahoo data so a shared server isn't rate-limited.

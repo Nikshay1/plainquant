@@ -55,7 +55,26 @@ If a strategy can't be tested faithfully (option legs, pairs, fundamentals, mixe
 the model says so and suggests a version that can be tested, instead of quietly testing
 something else.
 
-## Install
+## Download the app
+
+No Python, no terminal. Download, double-click, then click **Connect a model** and paste a key
+(Groq has a free tier).
+
+| Windows | macOS (Apple Silicon) | Linux |
+|---|---|---|
+| [plainquant-windows-setup.exe](https://github.com/Nikshay1/plainquant/releases/latest/download/plainquant-windows-setup.exe) | [plainquant-macos.dmg](https://github.com/Nikshay1/plainquant/releases/latest/download/plainquant-macos.dmg) | [plainquant-linux-x86_64.AppImage](https://github.com/Nikshay1/plainquant/releases/latest/download/plainquant-linux-x86_64.AppImage) |
+
+The app isn't signed with a paid Apple or Microsoft certificate yet, so the first launch asks you to confirm:
+
+- **Windows:** if SmartScreen says "Windows protected your PC", click **More info**, then **Run anyway**.
+- **macOS:** open the app once, then go to **System Settings > Privacy & Security** and click
+  **Open Anyway**.
+- **Linux:** make the file executable (`chmod +x plainquant-linux-x86_64.AppImage`) and run it.
+
+The app is the same plainquant as below, in its own window. Everything still runs on your
+computer.
+
+## Install with Python
 
 ```bash
 pip install "plainquant[all] @ git+https://github.com/Nikshay1/plainquant"

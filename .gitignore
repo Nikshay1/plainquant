@@ -9,3 +9,6 @@ build/
 .env
 *.html.out
 reports/
+packaging/build/
+packaging/dist/
+packaging/*.AppDir/

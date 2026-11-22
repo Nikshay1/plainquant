@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=plainquant
+Comment=Backtest trading strategies written in plain English
+Exec=plainquant
+Icon=plainquant
+Categories=Office;Finance;
+Terminal=false

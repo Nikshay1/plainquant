@@ -131,6 +131,12 @@ def cmd_serve(args) -> int:
     return 0
 
 
+def cmd_app(args) -> int:
+    from .desktop import main as desktop_main
+
+    return desktop_main()
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="plainquant", description="Backtest trading strategies written in plain English.")
     p.add_argument("--version", action="version", version=f"plainquant {__version__}")
@@ -170,6 +176,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("examples", help="list bundled example strategies").set_defaults(func=cmd_examples)
     sub.add_parser("indicators", help="list indicators").set_defaults(func=cmd_indicators)
     sub.add_parser("schema", help="print the strategy JSON Schema").set_defaults(func=cmd_schema)
+
+    sub.add_parser("app", help="open plainquant in its own desktop window").set_defaults(func=cmd_app)
 
     sp = sub.add_parser("serve", help="start the local web app")
     sp.add_argument("--host", default="127.0.0.1")

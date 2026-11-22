@@ -1,0 +1,119 @@
+name: Desktop app
+
+# Builds the double-click desktop app for Windows, macOS and Linux.
+# Run it by hand (Actions > Desktop app > Run workflow) to get test builds as artifacts.
+# Pushing a version tag (v0.2.0) also attaches the installers to that GitHub release.
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            file: plainquant-windows-setup.exe
+          - os: macos-14
+            file: plainquant-macos.dmg
+          - os: ubuntu-22.04
+            file: plainquant-linux-x86_64.AppImage
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install ".[desktop]" pyinstaller pillow
+          if [ "$RUNNER_OS" = "Linux" ]; then pip install "pywebview[qt]"; fi
+
+      - name: Linux libraries for Qt WebEngine
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libxkbcommon-x11-0 libnss3 libnspr4 \
+            libxcomposite1 libxdamage1 libxrandr2 libxtst6 libxshmfence1 libgbm1 libasound2 libdbus-1-3 \
+            libfontconfig1 libxkbfile1 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0
+
+      - name: Build
+        working-directory: packaging
+        run: pyinstaller -y plainquant.spec
+
+      - name: Check the build (Linux)
+        if: runner.os == 'Linux'
+        working-directory: packaging
+        env:
+          PLAINQUANT_SMOKE: "1"
+          QT_QPA_PLATFORM: offscreen
+        run: dist/plainquant/plainquant
+
+      - name: Check the build (macOS)
+        if: runner.os == 'macOS'
+        working-directory: packaging
+        env:
+          PLAINQUANT_SMOKE: "1"
+        run: dist/plainquant.app/Contents/MacOS/plainquant
+
+      - name: Check the build (Windows)
+        if: runner.os == 'Windows'
+        working-directory: packaging
+        shell: pwsh
+        run: |
+          $env:PLAINQUANT_SMOKE = "1"
+          $p = Start-Process -FilePath dist\plainquant\plainquant.exe -Wait -PassThru
+          Get-Content "$env:APPDATA\plainquant\app.log" -ErrorAction SilentlyContinue
+          if ($p.ExitCode -ne 0) { throw "smoke check failed: $($p.ExitCode)" }
+
+      - name: Package (Windows installer)
+        if: runner.os == 'Windows'
+        working-directory: packaging
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          if ($version -notmatch '^\d') { $version = "0.0.0-dev" }
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" windows.iss
+
+      - name: Package (macOS disk image)
+        if: runner.os == 'macOS'
+        working-directory: packaging
+        run: hdiutil create -volname plainquant -srcfolder dist/plainquant.app -ov -format UDZO dist/${{ matrix.file }}
+
+      - name: Package (Linux AppImage)
+        if: runner.os == 'Linux'
+        working-directory: packaging
+        run: |
+          # appimagetool fails on an AppDir inside a git checkout, so assemble it in the temp folder.
+          APPDIR="$RUNNER_TEMP/plainquant.AppDir"
+          mkdir -p "$APPDIR/opt"
+          cp -r dist/plainquant "$APPDIR/opt/plainquant"
+          cp plainquant.desktop "$APPDIR/"
+          cp icon.png "$APPDIR/plainquant.png"
+          printf '#!/bin/sh\nHERE="$(dirname "$(readlink -f "$0")")"\nexec "$HERE/opt/plainquant/plainquant" "$@"\n' > "$APPDIR/AppRun"
+          chmod +x "$APPDIR/AppRun"
+          curl -sSL -o "$RUNNER_TEMP/appimagetool" https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x "$RUNNER_TEMP/appimagetool"
+          ARCH=x86_64 "$RUNNER_TEMP/appimagetool" --appimage-extract-and-run "$APPDIR" "$PWD/dist/${{ matrix.file }}"
+          PLAINQUANT_SMOKE=1 QT_QPA_PLATFORM=offscreen "dist/${{ matrix.file }}" --appimage-extract-and-run
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.file }}
+          path: packaging/dist/${{ matrix.file }}
+          if-no-files-found: error
+
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: packaging/dist/${{ matrix.file }}
