@@ -17,17 +17,34 @@ from dataclasses import dataclass
 
 from pydantic import ValidationError
 
-from . import indicators
+from . import indicators, settings
 from .dsl import CompareRule, IndicatorOperand, ParseResult, Strategy, TimeWindowRule
 
 PRESETS: dict[str, dict] = {
-    "anthropic": {"kind": "anthropic", "model": "claude-opus-5-5", "key_env": "ANTHROPIC_API_KEY"},
-    "openai": {"kind": "openai", "base_url": None, "key_env": "OPENAI_API_KEY"},
-    "ollama": {"kind": "openai", "base_url": "http://localhost:11434/v1", "key_env": None},
-    "lmstudio": {"kind": "openai", "base_url": "http://localhost:1234/v1", "key_env": None},
-    "openrouter": {"kind": "openai", "base_url": "https://openrouter.ai/api/v1", "key_env": "OPENROUTER_API_KEY"},
-    "groq": {"kind": "openai", "base_url": "https://api.groq.com/openai/v1", "key_env": "GROQ_API_KEY"},
+    "groq": {"kind": "openai", "base_url": "https://api.groq.com/openai/v1", "key_env": "GROQ_API_KEY",
+             "model": "openai/gpt-oss-120b", "label": "Groq", "note": "Free tier, no card needed",
+             "key_url": "https://console.groq.com/keys"},
+    "anthropic": {"kind": "anthropic", "model": "claude-opus-5-5", "key_env": "ANTHROPIC_API_KEY",
+                  "label": "Claude", "note": "Most reliable reading", "key_url": "https://console.anthropic.com/settings/keys"},
+    "openai": {"kind": "openai", "base_url": None, "key_env": "OPENAI_API_KEY",
+               "label": "OpenAI", "note": "Paid API key", "key_url": "https://platform.openai.com/api-keys"},
+    "openrouter": {"kind": "openai", "base_url": "https://openrouter.ai/api/v1", "key_env": "OPENROUTER_API_KEY",
+                   "label": "OpenRouter", "note": "Hundreds of models, one key", "key_url": "https://openrouter.ai/keys"},
+    "ollama": {"kind": "openai", "base_url": "http://localhost:11434/v1", "key_env": None,
+               "label": "Ollama", "note": "Free, runs on your computer", "key_url": "https://ollama.com/download"},
+    "lmstudio": {"kind": "openai", "base_url": "http://localhost:1234/v1", "key_env": None,
+                 "label": "LM Studio", "note": "Free, runs on your computer", "key_url": "https://lmstudio.ai"},
 }
+
+
+def providers() -> list[dict]:
+    """Provider choices for the web app's setup screen."""
+    return [
+        {"id": k, "label": v["label"], "note": v["note"], "key_url": v["key_url"], "needs_key": bool(v["key_env"]),
+         "default_model": v.get("model"), "base_url": v.get("base_url")}
+        for k, v in PRESETS.items()
+    ]
+
 
 # Models that accept the server-side refusal fallback.
 _FALLBACK_MODELS = {"claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5", "claude-fable-5-1", "claude-fable-5-2"}
@@ -54,10 +71,14 @@ class LLMConfig:
         return f"{self.provider}: {self.model}{where}"
 
 
-SETUP_HELP = """No model is configured. plainquant uses your own model, pick one:
+SETUP_HELP = """No model is connected. plainquant uses your own model.
 
+Easiest: run `plainquant` and click "Connect a model" in the app that opens.
+Groq has a free tier: get a key at https://console.groq.com/keys
+
+Or set it in your shell:
   Claude:        export ANTHROPIC_API_KEY=...
-  OpenAI:        export OPENAI_API_KEY=...  PLAINQUANT_MODEL=<model>
+  Groq:          export PLAINQUANT_PROVIDER=groq GROQ_API_KEY=...
   Ollama (free, local):
                  ollama pull <model>
                  export PLAINQUANT_PROVIDER=ollama PLAINQUANT_MODEL=<model>
@@ -67,8 +88,26 @@ SETUP_HELP = """No model is configured. plainquant uses your own model, pick one
 Or skip the model and run a strategy file: plainquant backtest strategy.json"""
 
 
+def config_source() -> str | None:
+    """Where the model settings come from: "environment", "app" (saved from the web app) or None.
+
+    Order: --provider or PLAINQUANT_PROVIDER, then settings saved in the app, then an
+    ANTHROPIC_API_KEY or OPENAI_API_KEY already in the environment.
+    """
+    env = os.environ
+    if env.get("PLAINQUANT_PROVIDER"):
+        return "environment"
+    if settings.load():
+        return "app"
+    if env.get("ANTHROPIC_API_KEY") or env.get("OPENAI_API_KEY"):
+        return "environment"
+    return None
+
+
 def config_from_env(provider: str | None = None, model: str | None = None, base_url: str | None = None) -> LLMConfig:
     env = os.environ
+    if not provider and not env.get("PLAINQUANT_PROVIDER") and (saved := settings.load()):
+        return config_from_saved(saved, model=model, base_url=base_url)
     provider = provider or env.get("PLAINQUANT_PROVIDER")
     if not provider:
         if env.get("ANTHROPIC_API_KEY"):
@@ -90,6 +129,46 @@ def config_from_env(provider: str | None = None, model: str | None = None, base_
     custom_endpoint = base_url != preset.get("base_url")
     api_key = env.get("PLAINQUANT_API_KEY") or (env.get(key_env) if key_env and not custom_endpoint else None)
     return LLMConfig(provider=provider, kind=preset["kind"], model=model, base_url=base_url, api_key=api_key)
+
+
+def config_from_saved(saved: dict, model: str | None = None, base_url: str | None = None) -> LLMConfig:
+    provider = saved["provider"]
+    if provider not in PRESETS:
+        raise LLMNotConfigured(f"Saved provider '{provider}' is unknown. Pick a model again in the app.")
+    preset = PRESETS[provider]
+    model = model or saved.get("model") or preset.get("model")
+    if not model:
+        raise LLMNotConfigured("Pick a model in the app's model settings.")
+    saved_url = saved.get("base_url") or preset.get("base_url")
+    # The saved key belongs to the saved endpoint; never send it somewhere else.
+    key = saved.get("api_key") if not base_url or base_url == saved_url else None
+    return LLMConfig(provider=provider, kind=preset["kind"], model=model, base_url=base_url or saved_url, api_key=key)
+
+
+def config_for(provider: str, model: str = "", base_url: str | None = None, api_key: str | None = None) -> LLMConfig:
+    """A config from explicit choices (the web app's setup screen). Ignores the environment."""
+    if provider not in PRESETS:
+        raise LLMNotConfigured(f"Unknown provider '{provider}'. Choose from: {', '.join(PRESETS)}")
+    preset = PRESETS[provider]
+    return LLMConfig(provider=provider, kind=preset["kind"], model=model or preset.get("model") or "",
+                     base_url=base_url or preset.get("base_url"), api_key=api_key or None)
+
+
+def list_models(cfg: LLMConfig) -> list[str]:
+    """The models this endpoint offers. Also proves the key and URL work."""
+    if cfg.kind == "anthropic":
+        try:
+            import anthropic
+        except ImportError as e:  # pragma: no cover
+            raise LLMNotConfigured("Install the Claude client: pip install 'plainquant[anthropic]'") from e
+        client = anthropic.Anthropic(api_key=cfg.api_key, max_retries=1, timeout=20)
+        return sorted(m.id for m in client.models.list(limit=100))
+    try:
+        import openai
+    except ImportError as e:  # pragma: no cover
+        raise LLMNotConfigured("Install the OpenAI-compatible client: pip install 'plainquant[openai]'") from e
+    client = openai.OpenAI(base_url=cfg.base_url, api_key=cfg.api_key or "not-needed", max_retries=1, timeout=20)
+    return sorted(m.id for m in client.models.list())
 
 
 # ---------------------------------------------------------------- prompt

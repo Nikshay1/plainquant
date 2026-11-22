@@ -15,6 +15,12 @@ def make_frame(closes, start="2025-01-06 09:15", freq="5min", tz="Asia/Kolkata",
     return pd.DataFrame({"open": o, "high": h, "low": l, "close": closes, "volume": 1000.0}, index=idx)
 
 
+@pytest.fixture(autouse=True)
+def _isolated_settings(tmp_path, monkeypatch):
+    """Never read or write the real settings file of whoever runs the tests."""
+    monkeypatch.setenv("PLAINQUANT_CONFIG", str(tmp_path / "settings.json"))
+
+
 class FrameProvider:
     name = "test"
 

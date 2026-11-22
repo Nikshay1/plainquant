@@ -25,10 +25,14 @@ commit. A step is checked off only after it has been run for real, not just unit
       - UI: daily trades showed 00:00, old results stayed after an error, missing favicon.
 - [ ] Re-run on GPT-6 Luna once an OpenAI key is available.
 
-## Step 1: Release polish
-- [x] Screenshot of the web app in the README (with the redesigned dark, dot-matrix UI).
-- [ ] Publish to PyPI so `pip install plainquant` works.
-- [ ] Tag v0.2.0 with release notes.
+## Step 1: Make it easy to use
+Most people won't clone a repo and set environment variables to try a strategy.
+- [x] Screenshots of the web app in the README.
+- [x] 1a. Connect a model inside the app: pick a provider, paste a key, pick from the models it lists,
+      saved on the user's computer. `plainquant` on its own opens the app in the browser.
+- [ ] 1b. Publish to PyPI so `uvx plainquant` (or `pipx run plainquant`) works with no clone. Tag v0.2.0.
+- [ ] 1c. Free hosted version on Hugging Face Spaces: open a link, try the examples, paste your own key
+      (used per request, never stored). Cache Yahoo data so a shared server isn't rate-limited.
 
 ## Step 2: Nested logic
 - [ ] Support `(A and B) or C` without a recursive schema, e.g. a list of rule groups

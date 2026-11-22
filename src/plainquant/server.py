@@ -6,18 +6,30 @@ model endpoint you configured.
 
 from __future__ import annotations
 
+import os
 from importlib import resources
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, ValidationError
 
-from . import examples
+from . import examples, settings
 from .data import DataProvider, YahooProvider
 from .dsl import Strategy
 from .engine import run
 from .explain import explain
-from .llm import LLMConfig, LLMError, LLMNotConfigured, config_from_env, parse_strategy, semantic_errors
+from .llm import (
+    LLMConfig,
+    LLMError,
+    LLMNotConfigured,
+    config_for,
+    config_from_env,
+    config_source,
+    list_models,
+    parse_strategy,
+    providers,
+    semantic_errors,
+)
 from .report import to_dict
 
 # Files the page loads. Bundled so the app works offline and makes no third-party requests.
@@ -30,6 +42,30 @@ class PromptIn(BaseModel):
 
 class StrategyIn(BaseModel):
     strategy: dict
+
+
+class ModelChoice(BaseModel):
+    provider: str
+    model: str = ""
+    base_url: str | None = None
+    api_key: str | None = None
+
+
+LOOPBACK = {"127.0.0.1", "::1", "localhost"}
+
+
+def local_only(request: Request) -> None:
+    """Model settings can only be read or changed by a browser on this computer, on this app's page.
+
+    Blocks other machines (when served on 0.0.0.0), DNS-rebinding pages, and other websites
+    posting to localhost.
+    """
+    host = (request.headers.get("host") or "").rsplit(":", 1)[0].strip("[]")
+    client = request.client.host if request.client else ""
+    origin = request.headers.get("origin")
+    same_origin = origin is None or origin.split("://", 1)[-1] == request.headers.get("host")
+    if host not in LOOPBACK or client not in LOOPBACK or not same_origin:
+        raise HTTPException(403, detail=["Model settings can only be changed from this computer."])
 
 
 def create_app(provider: DataProvider | None = None, llm: LLMConfig | None = None) -> FastAPI:
@@ -70,6 +106,68 @@ def create_app(provider: DataProvider | None = None, llm: LLMConfig | None = Non
         except LLMNotConfigured as e:
             return {"llm": None, "help": str(e)}
 
+    def settings_view() -> dict:
+        try:
+            cfg = llm_config()
+        except LLMNotConfigured:
+            cfg = None
+        key = cfg.api_key if cfg else None
+        return {
+            "connected": cfg is not None,
+            "source": "app" if llm is None and config_source() == "app" else ("environment" if cfg else None),
+            "provider": cfg.provider if cfg else None,
+            "model": cfg.model if cfg else None,
+            "base_url": cfg.base_url if cfg else None,
+            "key_hint": f"…{key[-4:]}" if key and len(key) > 8 else ("set" if key else None),
+            "path": str(settings.path()),
+            "env_locked": llm is None and bool(os.environ.get("PLAINQUANT_PROVIDER")),
+            "providers": providers(),
+        }
+
+    def chosen(body: ModelChoice) -> LLMConfig:
+        cfg = config_for(body.provider, body.model, body.base_url, body.api_key)
+        saved = settings.load()
+        # Reuse the saved key when the user only changes the model on the same endpoint.
+        if not cfg.api_key and saved and saved["provider"] == cfg.provider:
+            same_url = (saved["base_url"] or config_for(saved["provider"]).base_url) == cfg.base_url
+            if same_url:
+                cfg.api_key = saved["api_key"]
+        return cfg
+
+    def fetch_models(cfg: LLMConfig) -> list[str]:
+        try:
+            return list_models(cfg)
+        except LLMNotConfigured as e:
+            raise HTTPException(400, detail=[str(e)]) from e
+        except Exception as e:  # bad key, wrong URL, server not running
+            raise HTTPException(400, detail=[_friendly(e, cfg)]) from e
+
+    @app.get("/api/settings", dependencies=[Depends(local_only)])
+    def get_settings():
+        return settings_view()
+
+    @app.post("/api/settings/models", dependencies=[Depends(local_only)])
+    def settings_models(body: ModelChoice):
+        cfg = chosen(body)
+        return {"models": fetch_models(cfg)}
+
+    @app.post("/api/settings", dependencies=[Depends(local_only)])
+    def save_settings(body: ModelChoice):
+        cfg = chosen(body)
+        if not cfg.model:
+            raise HTTPException(400, detail=["Pick a model."])
+        models = fetch_models(cfg)
+        if models and cfg.model not in models:
+            raise HTTPException(400, detail=[f"{cfg.model} isn't offered by this provider. Pick one from the list."])
+        custom = cfg.base_url if cfg.base_url != config_for(cfg.provider).base_url else None
+        settings.save(cfg.provider, cfg.model, custom, cfg.api_key)
+        return settings_view()
+
+    @app.delete("/api/settings", dependencies=[Depends(local_only)])
+    def forget_settings():
+        settings.clear()
+        return settings_view()
+
     @app.get("/api/examples")
     def list_examples():
         out = []
@@ -106,6 +204,17 @@ def create_app(provider: DataProvider | None = None, llm: LLMConfig | None = Non
             raise HTTPException(422, detail=[str(e)]) from e
 
     return app
+
+
+def _friendly(e: Exception, cfg: LLMConfig) -> str:
+    text = str(e)
+    status = getattr(e, "status_code", None)
+    if status in (401, 403):
+        return "The key was rejected. Check that you pasted the whole key."
+    if "Connection" in type(e).__name__ or "connect" in text.lower():
+        where = cfg.base_url or "the provider"
+        return f"Couldn't reach {where}. If it runs on your computer, make sure it's started."
+    return f"The provider said: {text[:300]}"
 
 
 def _errors(e: ValidationError) -> list[str]:

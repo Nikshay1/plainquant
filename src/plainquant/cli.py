@@ -6,6 +6,8 @@ import argparse
 import json
 import os
 import sys
+import threading
+import webbrowser
 from pathlib import Path
 
 from . import __version__, examples, indicators
@@ -121,7 +123,10 @@ def cmd_serve(args) -> int:
         return 1
     from .server import create_app
 
-    print(f"plainquant web app on http://{args.host}:{args.port}", file=sys.stderr)
+    url = f"http://{'127.0.0.1' if args.host in ('0.0.0.0', '::') else args.host}:{args.port}"
+    print(f"plainquant is running at {url}  (Ctrl+C to stop)", file=sys.stderr)
+    if not args.no_browser:
+        threading.Timer(1.0, webbrowser.open, [url]).start()
     uvicorn.run(create_app(), host=args.host, port=args.port, log_level="warning")
     return 0
 
@@ -129,7 +134,7 @@ def cmd_serve(args) -> int:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="plainquant", description="Backtest trading strategies written in plain English.")
     p.add_argument("--version", action="version", version=f"plainquant {__version__}")
-    sub = p.add_subparsers(dest="command", required=True)
+    sub = p.add_subparsers(dest="command")
 
     def llm_opts(sp):
         sp.add_argument("--provider", help="anthropic, openai, ollama, lmstudio, openrouter, groq")
@@ -169,12 +174,15 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("serve", help="start the local web app")
     sp.add_argument("--host", default="127.0.0.1")
     sp.add_argument("--port", type=int, default=8000)
+    sp.add_argument("--no-browser", action="store_true", help="don't open the browser")
     sp.set_defaults(func=cmd_serve)
     return p
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    argv = sys.argv[1:] if argv is None else argv
+    # `plainquant` on its own opens the web app.
+    args = build_parser().parse_args(argv or ["serve"])
     try:
         return args.func(args)
     except LLMNotConfigured as e:

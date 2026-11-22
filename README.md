@@ -63,9 +63,19 @@ pip install "plainquant[all] @ git+https://github.com/Nikshay1/plainquant"
 
 Python 3.10 or newer. `[all]` adds the Claude and OpenAI-compatible clients and the web app.
 
+Then run `plainquant`. The app opens in your browser. Click **Connect a model**, pick a provider,
+paste a key and pick a model. That's the whole setup. Groq has a free tier, so you can start
+without paying anything. The bundled examples work before you connect anything.
+
 ## Bring your own model
 
-Pick whichever you have. Your prompt goes only to the endpoint you configure.
+Pick whichever you have, in the app's **Connect a model** window or with environment variables.
+Your prompt goes only to the endpoint you pick. A key saved in the app stays in a file only your
+user can read (`~/.config/plainquant/settings.json` on Linux, the usual app-settings folder on macOS
+and Windows), and only the local browser on your computer can change it.
+
+`--provider` or `PLAINQUANT_PROVIDER` takes priority over the saved settings, which take priority over
+an `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` already in your shell.
 
 | Model | Setup |
 |---|---|
@@ -100,7 +110,7 @@ plainquant run "..." --yes --html report.html     # skip the confirm step, save 
 plainquant parse "..." -o my_strategy.json         # just write the strategy file
 plainquant backtest my_strategy.json               # run a file, no model needed
 plainquant backtest --example golden_cross_nifty   # bundled examples: plainquant examples
-plainquant serve                                   # web app on http://127.0.0.1:8000
+plainquant                                         # open the web app (same as `plainquant serve`)
 plainquant indicators                              # what the engine understands
 plainquant schema                                  # the strategy JSON Schema
 ```
