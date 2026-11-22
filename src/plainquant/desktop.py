@@ -42,7 +42,12 @@ def main() -> int:
         return 1
 
     if os.environ.get("PLAINQUANT_SMOKE"):
-        return _smoke(port)
+        code = _smoke(port)
+        server.should_exit = True
+        thread.join(timeout=5)
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(code)  # don't wait on the window toolkit's own shutdown (it can hang without a window)
 
     webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True  # "Get a key" links open in the real browser
     webview.create_window(
@@ -64,14 +69,20 @@ def _smoke(port: int) -> int:
     import importlib
     import urllib.request
 
-    backend = {"win32": "edgechromium", "darwin": "cocoa"}.get(sys.platform, "qt")
-    importlib.import_module(f"webview.platforms.{backend}")
     base = f"http://127.0.0.1:{port}"
-    for path in ("/", "/api/examples", "/assets/hero.webp", "/assets/Doto.woff2"):
-        with urllib.request.urlopen(base + path, timeout=10) as r:
-            assert r.status == 200 and r.read(), path
-    print(f"smoke ok ({backend})")
-    return 0
+    try:
+        for path in ("/", "/api/examples", "/assets/hero.webp", "/assets/Doto.woff2"):
+            with urllib.request.urlopen(base + path, timeout=10) as r:
+                if r.status != 200 or not r.read():
+                    raise RuntimeError(f"{path} returned {r.status}")
+            print(f"smoke: {path} ok", flush=True)
+        backend = {"win32": "edgechromium", "darwin": "cocoa"}.get(sys.platform, "qt")
+        importlib.import_module(f"webview.platforms.{backend}")
+        print(f"smoke ok ({backend})", flush=True)
+        return 0
+    except Exception as e:  # noqa: BLE001 - report any failure as a failed check
+        print(f"smoke failed: {type(e).__name__}: {e}", flush=True)
+        return 1
 
 
 if __name__ == "__main__":  # pragma: no cover

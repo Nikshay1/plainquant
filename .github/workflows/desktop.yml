@@ -19,11 +19,12 @@ jobs:
         include:
           - os: windows-latest
             file: plainquant-windows-setup.exe
-          - os: macos-14
+          - os: macos-latest
             file: plainquant-macos.dmg
           - os: ubuntu-22.04
             file: plainquant-linux-x86_64.AppImage
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -50,6 +51,7 @@ jobs:
         run: pyinstaller -y plainquant.spec
 
       - name: Check the build (Linux)
+        timeout-minutes: 3
         if: runner.os == 'Linux'
         working-directory: packaging
         env:
@@ -58,6 +60,7 @@ jobs:
         run: dist/plainquant/plainquant
 
       - name: Check the build (macOS)
+        timeout-minutes: 3
         if: runner.os == 'macOS'
         working-directory: packaging
         env:
@@ -65,13 +68,16 @@ jobs:
         run: dist/plainquant.app/Contents/MacOS/plainquant
 
       - name: Check the build (Windows)
+        timeout-minutes: 4
         if: runner.os == 'Windows'
         working-directory: packaging
         shell: pwsh
         run: |
           $env:PLAINQUANT_SMOKE = "1"
-          $p = Start-Process -FilePath dist\plainquant\plainquant.exe -Wait -PassThru
+          $p = Start-Process -FilePath dist\plainquant\plainquant.exe -PassThru
+          $done = $p.WaitForExit(120000)
           Get-Content "$env:APPDATA\plainquant\app.log" -ErrorAction SilentlyContinue
+          if (-not $done) { Stop-Process -Id $p.Id -Force; throw "smoke check timed out" }
           if ($p.ExitCode -ne 0) { throw "smoke check failed: $($p.ExitCode)" }
 
       - name: Package (Windows installer)
